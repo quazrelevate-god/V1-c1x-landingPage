@@ -157,10 +157,22 @@ const CALLOUTS = [
 // back through the phone's mapping (the clip starts at VIDEO_START and spans
 // APERTURE_END..SCRUB_END) and they land here. Retiming the scroll without
 // moving these would have drifted every label off the reveal it names.
+//
+// x/y are the dot, and the dot has to sit on deck while the label runs back into
+// open water — so both are placed against the hull's left edge, sampled off the
+// frame these appear over (t≈5.7). That edge walks right as it descends:
+//
+//   y%    20    24    28    32    36    40    44
+//   hull  22.5  26.5  30.5  32.5  36.5  40.0  44.5
+//
+// Each dot sits ~8% inside it, which leaves every label ending ~16px clear of
+// the hull. The previous anchors put Secured's label well inside the ship and
+// Matched's right against it, because they were placed against a scan that
+// mistook bright water for hull.
 const PORTRAIT_CALLOUTS = [
-  { label: "Verified", at: 0.43, x: "34%", y: "22%" },
-  { label: "Matched", at: 0.53, x: "52%", y: "40%" },
-  { label: "Secured", at: 0.62, x: "70%", y: "49%" },
+  { label: "Verified", at: 0.43, x: "32.5%", y: "22%" },
+  { label: "Matched", at: 0.53, x: "41.5%", y: "33%" },
+  { label: "Secured", at: 0.62, x: "52.5%", y: "44%" },
 ];
 
 function WireCallout({
@@ -191,24 +203,33 @@ function WireCallout({
         // Mirrored callouts grow leftwards from the dot, so the box has to hang
         // off the left of its anchor rather than the right.
         transform: `translate(${mirrored ? "calc(-100% + 4px)" : "-4px"}, -50%)`,
+        // Carries the dot, the leader and the label in one pass, so the whole
+        // callout keeps its edge over bright water, foam or a lit container.
+        filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))",
       }}
     >
-      <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
-        <span className="absolute h-2 w-2 rounded-full bg-accent" />
-        <span className="deal-callout-pulse absolute h-2 w-2 rounded-full bg-accent" />
+      <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
+        <span className="absolute h-2.5 w-2.5 rounded-full bg-accent" />
+        <span className="deal-callout-pulse absolute h-2.5 w-2.5 rounded-full bg-accent" />
       </span>
       {/* Shorter leader on a narrow frame so the label still lands inside it. */}
       <span
         // Mirrored leaders run a little longer so the label clears the hull —
         // the ship widens towards the stern, and the lowest callout would
         // otherwise sit half on the deck instead of in open water.
-        className={`h-px bg-accent/70 transition-transform duration-700 sm:w-[44px] ${
-          mirrored ? "w-[36px] origin-right" : "w-[24px] origin-left"
+        // 26px, not 36: the mirrored label hangs off the far side of this, and
+        // on a 360px-wide Galaxy the topmost one ran off the left edge. Every
+        // pixel here is a pixel the label loses.
+        className={`h-[1.5px] bg-accent transition-transform duration-700 sm:w-[44px] ${
+          mirrored ? "w-[26px] origin-right" : "w-[24px] origin-left"
         }`}
         style={{ transform: `scaleX(${o})` }}
       />
       <span
-        className={`font-display text-[0.62rem] tracking-[0.02em] whitespace-nowrap text-accent uppercase transition-transform duration-500 sm:text-[0.68rem] ${
+        // Heavier and wider than the landscape label. These have to be legible
+        // at arm's length over moving footage and catch the eye mid-scroll, and
+        // at 10px regular they read as a caption rather than a claim.
+        className={`font-display text-[0.74rem] font-semibold tracking-[0.07em] whitespace-nowrap text-accent uppercase transition-transform duration-500 sm:text-[0.68rem] sm:font-medium sm:tracking-[0.02em] ${
           mirrored ? "mr-2" : "ml-2"
         }`}
         style={{ transform: `translateX(${(1 - o) * (mirrored ? -8 : 8)}px)` }}
@@ -559,16 +580,17 @@ export function Hero() {
             className="pointer-events-none absolute inset-0"
             style={{ opacity: hold }}
           >
-            {(phone ? PORTRAIT_CALLOUTS : CALLOUTS).map((c) => (
-              <WireCallout
-                key={c.label}
-                label={c.label}
-                x={c.x}
-                y={c.y}
-                side={phone ? "left" : "right"}
-                progress={clamp((p - c.at) / 0.09)}
-              />
-            ))}
+            {phone
+              ? null
+              : CALLOUTS.map((c) => (
+                  <WireCallout
+                    key={c.label}
+                    label={c.label}
+                    x={c.x}
+                    y={c.y}
+                    progress={clamp((p - c.at) / 0.09)}
+                  />
+                ))}
           </div>
         </div>
         <Overlay />
@@ -594,6 +616,36 @@ export function Hero() {
         {phone && ready ? (
           <div className="pointer-events-none absolute inset-0 z-30">
             <HeroAperture progress={apertureProgress} focusRef={bandRef} />
+          </div>
+        ) : null}
+
+        {/*
+          The phone's callouts ride above Overlay, boxed to the band so their
+          percentages still land on the footage.
+
+          Inside the band they sat under Overlay's left-hand gradient, which lays
+          roughly 72% of the page background over exactly the strip the labels
+          occupy — which is why they read as washed-out olive rather than lime.
+          No amount of weight or shadow survives that; they have to be drawn on
+          top of it. Landscape is unaffected: its labels sit right of centre
+          where that gradient has already fallen away to nothing.
+        */}
+        {phone ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-16 z-30"
+            style={{ height: PORTRAIT_BAND, opacity: hold }}
+          >
+            {PORTRAIT_CALLOUTS.map((c) => (
+              <WireCallout
+                key={c.label}
+                label={c.label}
+                x={c.x}
+                y={c.y}
+                side="left"
+                progress={clamp((p - c.at) / 0.09)}
+              />
+            ))}
           </div>
         ) : null}
 
