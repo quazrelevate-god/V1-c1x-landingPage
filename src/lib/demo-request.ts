@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { countryByIso2, DEFAULT_ISO2, isKnownIso2 } from "@/lib/countries";
 
 /**
  * A demo request as submitted from /book-a-demo.
@@ -16,12 +17,23 @@ export const demoRequestSchema = z.object({
     .min(1, "Please enter your email.")
     .email("That email doesn't look right.")
     .max(200),
+  /**
+   * ISO 3166-1 alpha-2 of the dialling country. The dial code itself is
+   * resolved server-side from this, never taken from the client.
+   */
+  country: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .default(DEFAULT_ISO2)
+    .refine(isKnownIso2, "Please choose a country code."),
+  /** National number only — the country code is carried by `country`. */
   phone: z
     .string()
     .trim()
-    .min(6, "Please enter a contact number.")
-    .max(32, "That number is too long.")
-    .regex(/^[0-9+()\-.\s]+$/, "Use digits, spaces, and + ( ) - only."),
+    .min(4, "Please enter a contact number.")
+    .max(20, "That number is too long.")
+    .regex(/^[0-9()\-.\s]+$/, "Use digits, spaces, and ( ) - only."),
   company: z.string().trim().max(120, "That company name is too long.").optional().default(""),
   message: z
     .string()
@@ -54,6 +66,11 @@ export const submitDemoRequest = createServerFn({ method: "POST" })
       return { ok: false, error: "The form isn't connected yet. Please email us instead." };
     }
 
+    // The sheet keeps one Phone column, so the dial code is joined on here
+    // rather than adding a column the Apps Script doesn't know about.
+    const dial = countryByIso2(data.country)?.dial ?? "";
+    const fullPhone = `${dial} ${data.phone}`.trim();
+
     try {
       const response = await fetch(endpoint, {
         method: "POST",
@@ -61,7 +78,7 @@ export const submitDemoRequest = createServerFn({ method: "POST" })
         body: JSON.stringify({
           name: data.name,
           email: data.email,
-          phone: data.phone,
+          phone: fullPhone,
           company: data.company,
           message: data.message,
           submittedAt: new Date().toISOString(),

@@ -1,12 +1,22 @@
 import { useState, type FormEvent } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { demoRequestSchema, submitDemoRequest } from "@/lib/demo-request";
+import { CountryCodeSelect } from "@/components/site/CountryCodeSelect";
+import { countryByIso2, DEFAULT_ISO2, normalizeNationalNumber } from "@/lib/countries";
 
-type Field = "name" | "email" | "phone" | "company" | "message" | "website";
+type Field = "name" | "email" | "phone" | "country" | "company" | "message" | "website";
 type Values = Record<Field, string>;
 type Status = "idle" | "submitting" | "sent";
 
-const EMPTY: Values = { name: "", email: "", phone: "", company: "", message: "", website: "" };
+const EMPTY: Values = {
+  name: "",
+  email: "",
+  phone: "",
+  country: DEFAULT_ISO2,
+  company: "",
+  message: "",
+  website: "",
+};
 
 const labelClass =
   "font-display text-xs tracking-[0.02em] text-muted-foreground uppercase sm:text-[0.72rem]";
@@ -16,9 +26,13 @@ const labelClass =
 const fieldClass =
   "w-full rounded-lg border border-border bg-background/60 px-4 py-3 font-sans text-base text-foreground transition-colors duration-200 placeholder:text-muted-foreground/55 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25";
 
-function FieldError({ children }: { children?: string | undefined }) {
+function FieldError({ children, id }: { children?: string | undefined; id?: string }) {
   if (!children) return null;
-  return <p className="mt-2 font-sans text-sm text-destructive">{children}</p>;
+  return (
+    <p id={id} className="mt-2 font-sans text-sm text-destructive">
+      {children}
+    </p>
+  );
 }
 
 function Sent({ onReset }: { onReset: () => void }) {
@@ -55,11 +69,34 @@ export function BookDemoForm() {
     setErrors((e) => (e[field] ? { ...e, [field]: undefined } : e));
   };
 
+  const dial = countryByIso2(values.country)?.dial ?? "";
+
+  // Normalising on blur rather than on every keystroke: mid-typing, "+91…" is
+  // still a legitimate thing to have in the box, and rewriting it under the
+  // cursor fights the user. Blur, country change and submit are the settled
+  // moments where cleaning it up is safe.
+  const normalizePhone = (raw: string, forDial: string) => normalizeNationalNumber(raw, forDial);
+
+  function onCountryChange(iso2: string) {
+    const nextDial = countryByIso2(iso2)?.dial ?? "";
+    setValues((v) => ({ ...v, country: iso2, phone: normalizePhone(v.phone, nextDial) }));
+    setErrors((e) => {
+      if (!e.phone && !e.country) return e;
+      const next = { ...e };
+      delete next.phone;
+      delete next.country;
+      return next;
+    });
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setFormError("");
 
-    const parsed = demoRequestSchema.safeParse(values);
+    const cleaned = { ...values, phone: normalizePhone(values.phone, dial) };
+    if (cleaned.phone !== values.phone) setValues(cleaned);
+
+    const parsed = demoRequestSchema.safeParse(cleaned);
     if (!parsed.success) {
       const next: Partial<Record<Field, string>> = {};
       for (const issue of parsed.error.issues) {
@@ -131,19 +168,39 @@ export function BookDemoForm() {
           <label htmlFor="phone" className={labelClass}>
             Contact number
           </label>
-          <input
-            id="phone"
-            name="phone"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            value={values.phone}
-            onChange={set("phone")}
-            placeholder="+91 98765 43210"
-            aria-invalid={!!errors.phone}
-            className={`mt-2.5 ${fieldClass}`}
-          />
-          <FieldError>{errors.phone}</FieldError>
+          {/* The code picker and the number share one bordered shell so they
+              read as a single field, with focus-within lighting up the whole
+              control however the user got into it. */}
+          <div
+            className={`mt-2.5 flex items-stretch rounded-lg border bg-background/60 transition-colors duration-200 focus-within:ring-2 focus-within:ring-accent/25 ${
+              errors.phone || errors.country
+                ? "border-destructive"
+                : "border-border focus-within:border-accent"
+            }`}
+          >
+            <CountryCodeSelect
+              value={values.country}
+              onChange={onCountryChange}
+              describedBy={errors.phone || errors.country ? "phone-error" : undefined}
+              invalid={!!(errors.phone || errors.country)}
+            />
+            <span aria-hidden className="my-2.5 w-px shrink-0 bg-border" />
+            <input
+              id="phone"
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel-national"
+              value={values.phone}
+              onChange={set("phone")}
+              onBlur={() => setValues((v) => ({ ...v, phone: normalizePhone(v.phone, dial) }))}
+              placeholder="98765 43210"
+              aria-invalid={!!errors.phone}
+              aria-describedby={errors.phone || errors.country ? "phone-error" : undefined}
+              className="min-w-0 flex-1 rounded-r-lg bg-transparent px-3.5 py-3 font-sans text-base text-foreground outline-none placeholder:text-muted-foreground/55"
+            />
+          </div>
+          <FieldError id="phone-error">{errors.phone ?? errors.country}</FieldError>
         </div>
 
         <div className="sm:col-span-2">
