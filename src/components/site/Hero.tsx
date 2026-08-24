@@ -277,6 +277,8 @@ function HeroCopy({
 export function Hero() {
   const sectionRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // The footage's own box — what the aperture centres its opening on.
+  const bandRef = useRef<HTMLDivElement>(null);
   const target = useRef(0);
   const current = useRef(0);
   const [p, setP] = useState(0);
@@ -510,6 +512,7 @@ export function Hero() {
           seeking. From sm up it's full bleed as before.
         */}
         <div
+          ref={bandRef}
           className="absolute inset-x-0 top-16 sm:inset-0 sm:top-0 sm:h-full"
           // Once the ship has finished its run the footage sinks to a backdrop
           // for the Problem section rather than sliding away as a sheet. Only
@@ -571,24 +574,26 @@ export function Hero() {
         <Overlay />
 
         {/*
-          Boxed to the band, because the mark is a window onto the footage and
-          the footage is that box, not the pane — centred on the pane the opening
-          sat below the video entirely and revealed page background.
+          The cover spans the pane; the mark centres on the band.
 
-          Drawn as a sibling after Overlay rather than inside the band, though:
-          the band carries a filter and an opacity, both of which open a stacking
-          context, so anything within it paints under Overlay's gradients no
-          matter its z-index — which left the mark olive instead of lime.
+          Those are two different boxes and it matters. The mark is a window onto
+          the footage, so it has to sit over the footage — centred on the pane
+          the opening sat below the video entirely. But sizing the cover to the
+          band as well clipped the mark along the band's bottom edge, with screen
+          still visible below it: the left, right and top edges run off-screen so
+          nothing shows there, while the bottom cut is in plain view.
+
+          Drawn as a sibling after Overlay rather than inside the band: the band
+          carries a filter and an opacity, both of which open a stacking context,
+          so anything within it paints under Overlay's gradients whatever its
+          z-index — which left the mark olive instead of lime.
 
           Phones only for now; landscape keeps the clip's own fly-through, which
           has the width to read at its own pace.
         */}
         {phone && ready ? (
-          <div
-            className="pointer-events-none absolute inset-x-0 top-16 z-30"
-            style={{ height: PORTRAIT_BAND }}
-          >
-            <HeroAperture progress={apertureProgress} />
+          <div className="pointer-events-none absolute inset-0 z-30">
+            <HeroAperture progress={apertureProgress} focusRef={bandRef} />
           </div>
         ) : null}
 

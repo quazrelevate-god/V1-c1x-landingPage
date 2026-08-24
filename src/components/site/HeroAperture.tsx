@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 
 /**
  * The opening reveal: the brand mark as a window onto the hero.
@@ -79,11 +79,18 @@ const RIBBONS = [
 type Props = {
   /** 0 = closed on the mark, 1 = cleared the pane. Above 1 the cover unmounts. */
   progress: number;
-  /** Fraction of the pane's height the mark spans at progress 0. */
+  /**
+   * What the mark centres on. The cover always spans this component's own box,
+   * but the opening is a window onto the footage, so it has to sit over the
+   * footage — which on a phone is a band across the top, not the middle of the
+   * pane. Omit to centre on the box itself.
+   */
+  focusRef?: RefObject<HTMLElement | null>;
+  /** Fraction of the focus element's height the mark spans at progress 0. */
   startFraction?: number;
 };
 
-export function HeroAperture({ progress, startFraction = 0.31 }: Props) {
+export function HeroAperture({ progress, focusRef, startFraction = 0.31 }: Props) {
   const uid = useId().replace(/:/g, "");
   const hostRef = useRef<HTMLDivElement>(null);
   /*
@@ -96,24 +103,33 @@ export function HeroAperture({ progress, startFraction = 0.31 }: Props) {
    * orientation change or a browser-chrome resize re-derives clearAt for free,
    * which a one-off window read would not.
    */
-  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  const [box, setBox] = useState<{ w: number; h: number; cy: number; focusH: number } | null>(null);
 
   useEffect(() => {
     const el = hostRef.current;
     if (!el) return;
     const sync = () => {
       const r = el.getBoundingClientRect();
+      const f = focusRef?.current?.getBoundingClientRect();
+      // Centre of the focus element, expressed in the host's own coordinates.
+      const cy = f ? f.top - r.top + f.height / 2 : r.height / 2;
+      const focusH = f ? f.height : r.height;
       setBox((prev) =>
-        prev && Math.abs(prev.w - r.width) < 0.5 && Math.abs(prev.h - r.height) < 0.5
+        prev &&
+        Math.abs(prev.w - r.width) < 0.5 &&
+        Math.abs(prev.h - r.height) < 0.5 &&
+        Math.abs(prev.cy - cy) < 0.5 &&
+        Math.abs(prev.focusH - focusH) < 0.5
           ? prev
-          : { w: r.width, h: r.height },
+          : { w: r.width, h: r.height, cy, focusH },
       );
     };
     sync();
     const ro = new ResizeObserver(sync);
     ro.observe(el);
+    if (focusRef?.current) ro.observe(focusRef.current);
     return () => ro.disconnect();
-  }, []);
+  }, [focusRef]);
 
   const t = Math.min(Math.max(progress, 0), 1);
   // The host has to stay mounted for the observer to have something to measure,
@@ -124,13 +140,24 @@ export function HeroAperture({ progress, startFraction = 0.31 }: Props) {
     return <div ref={hostRef} aria-hidden className="pointer-events-none absolute inset-0 -z-10" />;
   }
 
-  const { w, h } = box;
-  // Edge length at which the aperture's pinch has passed the furthest corner.
-  const clearAt = (Math.hypot(w, h) * BOX) / WAIST;
-  const startSize = startFraction * h;
+  const { w, h, cy, focusH } = box;
+  /*
+   * How far the opening has to reach: the furthest corner of the cover, measured
+   * from where the mark actually sits — not from the middle of the cover.
+   *
+   * The mark is centred on the footage, which is high on the pane, so the corner
+   * it has to clear is a bottom one and it is further away than half a diagonal.
+   * Sizing off the box's own centre leaves the mark still growing when it runs
+   * out of scroll, so it gets cut off along the bottom while there is screen
+   * left below it. Where the mark is centred this reduces to hypot(w, h) / 2.
+   */
+  const reach = Math.hypot(w / 2, Math.max(cy, h - cy));
+  // Edge length at which the aperture's pinch has passed that corner.
+  const clearAt = (2 * reach * BOX) / WAIST;
+  const startSize = startFraction * focusH;
   // Linear: equal scroll buys equal growth, no easing.
   const size = startSize + t * (clearAt * 1.02 - startSize);
-  const place = `translate(${w / 2} ${h / 2}) scale(${size / BOX}) translate(-9 -9)`;
+  const place = `translate(${w / 2} ${cy}) scale(${size / BOX}) translate(-9 -9)`;
 
   const holeId = `c1x-hole-${uid}`;
   const bloomId = `c1x-bloom-${uid}`;
