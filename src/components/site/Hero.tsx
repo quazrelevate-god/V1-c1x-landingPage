@@ -80,59 +80,36 @@ const CALLOUTS = [
   { label: "Secured", at: 0.58, x: "72%", y: "49%" },
 ];
 
-/*
- * The portrait crop frames a different part of the deck, so the same three
- * labels need their own anchors. They hang off the ship's near edge and read
- * leftward into open water, which is the only clear space in this crop.
- */
-const CALLOUTS_MOBILE = [
-  { label: "Verified", at: 0.3, x: "36%", y: "24%" },
-  { label: "Matched", at: 0.44, x: "47%", y: "42%" },
-  { label: "Secured", at: 0.58, x: "60%", y: "59%" },
-];
 
 function WireCallout({
   label,
   x,
   y,
   progress,
-  flip = false,
 }: {
   label: string;
   x: string;
   y: string;
   progress: number;
-  /** Draws the leader right-to-left, so the label sits left of its anchor. */
-  flip?: boolean;
 }) {
   const o = clamp(progress);
   return (
     <div
-      className={`pointer-events-none absolute flex items-center gap-0 transition-opacity duration-500 ${
-        flip ? "flex-row-reverse" : ""
-      }`}
-      style={{
-        left: x,
-        top: y,
-        opacity: o,
-        transform: flip ? "translate(4px, -50%)" : "translate(-4px, -50%)",
-      }}
+      className="pointer-events-none absolute flex items-center gap-0 transition-opacity duration-500"
+      style={{ left: x, top: y, opacity: o, transform: "translate(-4px, -50%)" }}
     >
       <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
         <span className="absolute h-2 w-2 rounded-full bg-accent" />
         <span className="deal-callout-pulse absolute h-2 w-2 rounded-full bg-accent" />
       </span>
+      {/* Shorter leader on a narrow frame so the label still lands inside it. */}
       <span
-        className={`h-px bg-accent/70 transition-transform duration-700 ${
-          flip ? "origin-right" : "origin-left"
-        }`}
-        style={{ width: 44, transform: `scaleX(${o})` }}
+        className="h-px w-[24px] bg-accent/70 origin-left transition-transform duration-700 sm:w-[44px]"
+        style={{ transform: `scaleX(${o})` }}
       />
       <span
-        className={`font-display text-[0.68rem] tracking-[0.02em] whitespace-nowrap text-accent uppercase transition-transform duration-500 ${
-          flip ? "mr-2" : "ml-2"
-        }`}
-        style={{ transform: `translateX(${(1 - o) * (flip ? -8 : 8)}px)` }}
+        className="ml-2 font-display text-[0.62rem] tracking-[0.02em] whitespace-nowrap text-accent uppercase transition-transform duration-500 sm:text-[0.68rem]"
+        style={{ transform: `translateX(${(1 - o) * 8}px)` }}
       >
         {label}
       </span>
@@ -160,7 +137,7 @@ function HeroCopy({
   return (
     // On phones the copy lives under the video band, left aligned like the rest
     // of the page. From sm up it returns to centred over the full-bleed clip.
-    <div className="relative mx-auto flex h-full w-full max-w-6xl items-end justify-center px-5 pb-14 text-left sm:items-center sm:px-6 sm:pb-0 sm:text-center">
+    <div className="relative mx-auto flex h-full w-full max-w-6xl items-start justify-center px-5 pt-[calc(4rem+56.25vw+2rem)] text-left sm:items-center sm:px-6 sm:pt-0 sm:text-center">
       <div className="w-full max-w-2xl">
         <h1
           className="font-display text-[1.6rem] leading-[1.1] font-medium tracking-[-0.035em] text-foreground transition-[opacity,filter,transform] duration-700 ease-out sm:text-[2.4rem] lg:text-[2.9rem]"
@@ -345,14 +322,23 @@ export function Hero() {
           //
           // The height is portrait-only: at rest the band is the whole screen, so
           // the logo the clip opens on lands dead centre exactly as it does on
-          // desktop, then it retracts as the scrub starts, which frames the ship
-          // and opens up the space the copy reveals into. From sm up there is no
-          // inline height and sm:h-full drives it instead.
+          // desktop. It then retracts to the clip's own 16:9 box — not an
+          // arbitrary slice — so the finished frame a phone sees is the same
+          // frame a desktop sees, and the deck callouts can share one set of
+          // anchors. The retract completes at p=0.30, which is exactly when the
+          // first callout appears. From sm up sm:h-full drives the height.
           style={{
             filter: `brightness(${1 - dim * 0.74}) saturate(${1 - dim * 0.5})`,
             opacity: 1 - dim * 0.55,
             ...(narrow
-              ? { height: `${(100 - 44 * clamp((p - 0.05) / 0.25)).toFixed(1)}svh` }
+              ? {
+                  height: `calc(${(1 - clamp((p - 0.05) / 0.25)).toFixed(3)} * 100svh + ${clamp(
+                    (p - 0.05) / 0.25,
+                  ).toFixed(3)} * 100vw * 0.5625)`,
+                  // …and slides clear of the fixed nav as it shrinks, so the top
+                  // of the deck (and the Verified callout on it) isn't covered.
+                  top: `calc(${clamp((p - 0.05) / 0.25).toFixed(3)} * 4rem)`,
+                }
               : {}),
           }}
         >
@@ -379,49 +365,32 @@ export function Hero() {
           {/* Dissolves the band into the page on phones; no seam from sm up. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 sm:hidden"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 sm:hidden"
             style={{
               background:
                 "linear-gradient(to top, var(--background) 2%, color-mix(in oklab, var(--background) 55%, transparent) 45%, transparent 100%)",
             }}
           />
+
+          {/*
+            Anchored to the deck. These live inside the band so they track the
+            footage in both layouts — and because the band settles at the clip's
+            own aspect, one set of anchors reads correctly on a phone and on a
+            desktop alike.
+          */}
+          <div aria-hidden className="pointer-events-none absolute inset-0" style={{ opacity: hold }}>
+            {CALLOUTS.map((c) => (
+              <WireCallout
+                key={c.label}
+                label={c.label}
+                x={c.x}
+                y={c.y}
+                progress={clamp((p - c.at) / 0.09)}
+              />
+            ))}
+          </div>
         </div>
         <Overlay />
-
-        {/* Portrait: pinned to the video band, reading leftward into the water. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-[56svh] sm:hidden"
-          style={{ opacity: hold * (1 - dim * 0.55) }}
-        >
-          {CALLOUTS_MOBILE.map((c) => (
-            <WireCallout
-              key={c.label}
-              label={c.label}
-              x={c.x}
-              y={c.y}
-              progress={clamp((p - c.at) / 0.09)}
-              flip
-            />
-          ))}
-        </div>
-
-        {/* Anchored to where the deck sits in a landscape crop. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 hidden sm:block"
-          style={{ opacity: hold }}
-        >
-          {CALLOUTS.map((c) => (
-            <WireCallout
-              key={c.label}
-              label={c.label}
-              x={c.x}
-              y={c.y}
-              progress={clamp((p - c.at) / 0.09)}
-            />
-          ))}
-        </div>
 
         <div className="relative h-full">
           <HeroCopy
