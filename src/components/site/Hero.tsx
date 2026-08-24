@@ -15,6 +15,7 @@ import heroDesktopVideo from "@/assets/hero-desktop.mp4";
 // that made scrubbing the master on a phone stutter.
 import heroPortraitVideo from "@/assets/hero-mobile.mp4";
 import heroPortraitPoster from "@/assets/hero-mobile-poster.jpg";
+import { HeroAperture } from "./HeroAperture";
 import { REDUCED_MOTION_MQ } from "./primitives";
 
 /*
@@ -62,6 +63,26 @@ const OUTRO_LEN = 0.14;
 /* …and the footage sinks to a dim backdrop for the Problem section. */
 const DIM_AT = 0.76;
 const DIM_LEN = 0.2;
+
+/*
+ * Phones open on the vector aperture instead of the clip's own fly-through.
+ *
+ * The fly-through is over by t≈0.5s of a 7.17s clip — 7% of the timeline, which
+ * a linear scroll mapping turns into 7% of the scroll: about 86px, when an
+ * ordinary swipe travels 400-800px. The whole moment landed between two
+ * rendered frames, which is why it read as a skip rather than an animation.
+ * Making the section taller can't fix that; 7% of a bigger number is still 7%,
+ * and the fly-through would need a hero roughly ten screens tall to get a
+ * comfortable swipe.
+ *
+ * So the reveal is drawn rather than scrubbed. It gets APERTURE_END of the
+ * section to itself — ~440px, a full unhurried swipe — and the clip starts
+ * after its own logo moment, at VIDEO_START, so the ship is what shows through
+ * the growing window.
+ */
+const APERTURE_END = 0.26;
+/** Where the clip's fly-through has finished and the ship run begins. */
+const VIDEO_START = 0.55;
 
 function HeroCta() {
   return (
@@ -129,10 +150,17 @@ const CALLOUTS = [
 // y values track the hull's centreline through the crop, sampled off the encoded
 // frame (x% -> hull mid y%: 32->18, 50->46, 68->47, 74->51), so each dot lands on
 // the deck rather than in the water beside it.
+//
+// `at` is scroll, but what each label has to agree with is the wireframe
+// conversion in the footage — so these are the landscape timings carried across
+// rather than reinvented. Those fire at video t≈2.97 / 4.35 / 5.73; run those
+// back through the phone's mapping (the clip starts at VIDEO_START and spans
+// APERTURE_END..SCRUB_END) and they land here. Retiming the scroll without
+// moving these would have drifted every label off the reveal it names.
 const PORTRAIT_CALLOUTS = [
-  { label: "Verified", at: 0.3, x: "34%", y: "22%" },
-  { label: "Matched", at: 0.44, x: "52%", y: "40%" },
-  { label: "Secured", at: 0.58, x: "70%", y: "49%" },
+  { label: "Verified", at: 0.43, x: "34%", y: "22%" },
+  { label: "Matched", at: 0.53, x: "52%", y: "40%" },
+  { label: "Secured", at: 0.62, x: "70%", y: "49%" },
 ];
 
 function WireCallout({
@@ -379,7 +407,15 @@ export function Hero() {
       const dur = v.duration;
       if (!dur || Number.isNaN(dur)) return;
       current.current += (target.current - current.current) * 0.12;
-      const t = clamp(current.current / SCRUB_END) * (dur - 0.05);
+      const end = dur - 0.05;
+      // On a phone the aperture owns the opening, so the clip holds on its first
+      // post-fly-through frame until the window has cleared, then runs the rest
+      // of its length across the scroll that remains. Landscape still maps the
+      // whole timeline to the whole hero.
+      const t = phone
+        ? VIDEO_START +
+          clamp((current.current - APERTURE_END) / (SCRUB_END - APERTURE_END)) * (end - VIDEO_START)
+        : clamp(current.current / SCRUB_END) * end;
       if (Math.abs(v.currentTime - t) > 1 / 60) {
         try {
           v.currentTime = t;
@@ -390,7 +426,7 @@ export function Hero() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [reducedMotion]);
+  }, [reducedMotion, phone]);
 
   // Staged reveal: the opening logo flythrough owns p 0 -> ~0.06, then the
   // headline, subhead, and CTA each blur-fade in over their own scroll band.
@@ -399,10 +435,15 @@ export function Hero() {
   // by dissolving rather than sliding off as a sheet.
   const outro = clamp((p - OUTRO_AT) / OUTRO_LEN);
   const hold = 1 - outro;
-  const headlineReveal = clamp((p - 0.08) / 0.08) * hold;
-  const subheadReveal = clamp((p - 0.18) / 0.08) * hold;
-  const ctaReveal = clamp((p - 0.28) / 0.08) * hold;
+  // The copy can't start before the aperture has cleared on a phone, or it
+  // blur-fades in on top of the cover with the reveal still running behind it.
+  const copyAt = phone ? APERTURE_END + 0.02 : 0.08;
+  const headlineReveal = clamp((p - copyAt) / 0.08) * hold;
+  const subheadReveal = clamp((p - (copyAt + 0.07)) / 0.08) * hold;
+  const ctaReveal = clamp((p - (copyAt + 0.14)) / 0.08) * hold;
   const dim = clamp((p - DIM_AT) / DIM_LEN);
+  // 0 -> 1 across the aperture's own band; at 1 the cover unmounts itself.
+  const apertureProgress = p / APERTURE_END;
 
   if (ready && reducedMotion) {
     return (
@@ -529,7 +570,29 @@ export function Hero() {
         </div>
         <Overlay />
 
-        <div className="relative h-full">
+        {/*
+          Boxed to the band, because the mark is a window onto the footage and
+          the footage is that box, not the pane — centred on the pane the opening
+          sat below the video entirely and revealed page background.
+
+          Drawn as a sibling after Overlay rather than inside the band, though:
+          the band carries a filter and an opacity, both of which open a stacking
+          context, so anything within it paints under Overlay's gradients no
+          matter its z-index — which left the mark olive instead of lime.
+
+          Phones only for now; landscape keeps the clip's own fly-through, which
+          has the width to read at its own pace.
+        */}
+        {phone && ready ? (
+          <div
+            className="pointer-events-none absolute inset-x-0 top-16 z-30"
+            style={{ height: PORTRAIT_BAND }}
+          >
+            <HeroAperture progress={apertureProgress} />
+          </div>
+        ) : null}
+
+        <div className="relative z-40 h-full">
           <HeroCopy
             headlineReveal={headlineReveal}
             subheadReveal={subheadReveal}
