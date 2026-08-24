@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-// Phones get the short loop (2.5 MB) rather than the scrub master (7.3 MB): it is
-// the same footage, and nothing on mobile seeks through the timeline.
-import heroMobileVideo from "@/assets/hero-loop.mp4";
-import heroPoster from "@/assets/hero-port.jpg";
+// Shown only to visitors who have asked their OS to reduce motion: a plain
+// autoplay loop with no scrubbing, so it never seeks and never needs the scrub
+// master. Everyone else downloads neither of these two files.
+import heroReducedMotionVideo from "@/assets/hero-loop.mp4";
+import heroReducedMotionPoster from "@/assets/hero-port.jpg";
 // hero-desktop.mp4's own opening frame. The scrub sits at t=0 until you move, so
 // the poster has to be that same frame or the hero visibly jumps once the 7.4 MB
 // clip finishes loading.
@@ -15,6 +16,22 @@ import heroDesktopVideo from "@/assets/hero-desktop.mp4";
 import heroPortraitVideo from "@/assets/hero-mobile.mp4";
 import heroPortraitPoster from "@/assets/hero-mobile-poster.jpg";
 import { REDUCED_MOTION_MQ } from "./primitives";
+
+/*
+ * Optional CDN origin for the landscape master, set per-environment as
+ * VITE_MEDIA_BASE (e.g. https://cdn.example.com). Unset — which is how local dev
+ * and any fresh checkout run — everything falls back to the bundled asset, so
+ * this is a one-variable switch with no code change to roll back.
+ *
+ * Only the 7.4 MB master is worth moving. Railway answers a Range request with
+ * the whole file and a 200, so the browser can't seek it and the fallback below
+ * has to pull all 7.4 MB before the scrub is smooth; R2 answers a real 206, so
+ * the browser fetches just the bytes it needs. The portrait cut is a fifth of
+ * the size and the posters are first-paint assets where a second DNS + TLS
+ * handshake would cost more than it saves, so they stay bundled and keep Vite's
+ * content-hashed immutable caching.
+ */
+const MEDIA_BASE = import.meta.env["VITE_MEDIA_BASE"]?.replace(/\/+$/, "");
 
 /**
  * Height of the portrait band on phones.
@@ -268,7 +285,11 @@ export function Hero() {
 
   // One source of truth for which cut is in play: the <video>, the range probe,
   // and the poster all read from here, so they can't drift onto different clips.
-  const heroSrc = phone ? heroPortraitVideo : heroDesktopVideo;
+  const heroSrc = phone
+    ? heroPortraitVideo
+    : MEDIA_BASE
+      ? `${MEDIA_BASE}/hero-desktop.mp4`
+      : heroDesktopVideo;
 
   // scroll -> progress
   useEffect(() => {
@@ -311,6 +332,12 @@ export function Hero() {
    */
   useEffect(() => {
     if (reducedMotion || !ready) return;
+    // A cross-origin CDN is neither probeable nor in need of probing. Both
+    // fetches here would be blocked without a CORS policy on the bucket, so the
+    // fallback could never build its blob anyway — and it has nothing to fix:
+    // the clip is on a CDN precisely because that CDN serves real 206s. The
+    // <video> element fetches its own ranges without CORS, so it just works.
+    if (/^https?:\/\//i.test(heroSrc) && !heroSrc.startsWith(window.location.origin)) return;
     let cancelled = false;
     let objectUrl: string | null = null;
     // Drop any blob made for the other cut, so a viewport that crosses the
@@ -387,8 +414,8 @@ export function Hero() {
         <div className="relative h-[52svh] max-h-[520px] min-h-[280px] w-full shrink-0">
           <video
             className="absolute inset-0 h-full w-full object-cover"
-            src={heroMobileVideo}
-            poster={heroPoster}
+            src={heroReducedMotionVideo}
+            poster={heroReducedMotionPoster}
             autoPlay
             muted
             loop
