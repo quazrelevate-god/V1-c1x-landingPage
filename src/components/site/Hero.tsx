@@ -8,7 +8,28 @@ import heroPoster from "@/assets/hero-port.jpg";
 // clip finishes loading.
 import heroOpenPoster from "@/assets/hero-open-poster.jpg";
 import heroDesktopVideo from "@/assets/hero-desktop.mp4";
+// Phones scrub a purpose-built 4:5 portrait cut (720x900, 1.6 MB) instead of the
+// 1920x1080 master (7.4 MB). The crop and its pan are baked into the encode, and
+// keyframes sit every 5 frames so a seek never has to decode far — the two things
+// that made scrubbing the master on a phone stutter.
+import heroPortraitVideo from "@/assets/hero-mobile.mp4";
+import heroPortraitPoster from "@/assets/hero-mobile-poster.jpg";
 import { REDUCED_MOTION_MQ } from "./primitives";
+
+/**
+ * Height of the portrait band on phones.
+ *
+ * 125vw is the 4:5 cut's own aspect, so wherever it wins the clip is shown whole
+ * with no second crop — which is every iPhone from the 13 mini up, including the
+ * Pro Max sizes.
+ *
+ * The 58svh ceiling only bites on short viewports (iPhone SE, older Androids),
+ * and it has to exist: the copy under the band lives inside a sticky,
+ * overflow-hidden pane, so anything pushed past the fold there can never be
+ * scrolled to — it is simply lost, CTA included. Where the ceiling does bite the
+ * copy tightens too (see the max-height rules in HeroCopy).
+ */
+const PORTRAIT_BAND = "min(125vw, 58svh)";
 
 const headline = "Trade direct. Settle certain. No unverified hands in between.";
 const subhead =
@@ -80,23 +101,52 @@ const CALLOUTS = [
   { label: "Secured", at: 0.58, x: "72%", y: "49%" },
 ];
 
+/*
+ * The portrait cut frames the ship on the diagonal — bow high on the left, stern
+ * low on the right — which leaves the lower-left corner as open water. These
+ * anchors put each dot on the hull and let the label run back into that empty
+ * water, so the labels balance the frame instead of stacking up in the corner
+ * the ship already occupies. Landscape anchors can't be reused: they're placed
+ * against the full 16:9 frame, and in this crop they'd sit off the right edge.
+ */
+// y values track the hull's centreline through the crop, sampled off the encoded
+// frame (x% -> hull mid y%: 32->18, 50->46, 68->47, 74->51), so each dot lands on
+// the deck rather than in the water beside it.
+const PORTRAIT_CALLOUTS = [
+  { label: "Verified", at: 0.3, x: "34%", y: "22%" },
+  { label: "Matched", at: 0.44, x: "52%", y: "40%" },
+  { label: "Secured", at: 0.58, x: "70%", y: "49%" },
+];
 
 function WireCallout({
   label,
   x,
   y,
   progress,
+  /** "right" runs the label right of the dot; "left" mirrors it back to the west. */
+  side = "right",
 }: {
   label: string;
   x: string;
   y: string;
   progress: number;
+  side?: "left" | "right";
 }) {
   const o = clamp(progress);
+  const mirrored = side === "left";
   return (
     <div
-      className="pointer-events-none absolute flex items-center gap-0 transition-opacity duration-500"
-      style={{ left: x, top: y, opacity: o, transform: "translate(-4px, -50%)" }}
+      className={`pointer-events-none absolute flex items-center gap-0 transition-opacity duration-500 ${
+        mirrored ? "flex-row-reverse" : ""
+      }`}
+      style={{
+        left: x,
+        top: y,
+        opacity: o,
+        // Mirrored callouts grow leftwards from the dot, so the box has to hang
+        // off the left of its anchor rather than the right.
+        transform: `translate(${mirrored ? "calc(-100% + 4px)" : "-4px"}, -50%)`,
+      }}
     >
       <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
         <span className="absolute h-2 w-2 rounded-full bg-accent" />
@@ -104,12 +154,19 @@ function WireCallout({
       </span>
       {/* Shorter leader on a narrow frame so the label still lands inside it. */}
       <span
-        className="h-px w-[24px] bg-accent/70 origin-left transition-transform duration-700 sm:w-[44px]"
+        // Mirrored leaders run a little longer so the label clears the hull —
+        // the ship widens towards the stern, and the lowest callout would
+        // otherwise sit half on the deck instead of in open water.
+        className={`h-px bg-accent/70 transition-transform duration-700 sm:w-[44px] ${
+          mirrored ? "w-[36px] origin-right" : "w-[24px] origin-left"
+        }`}
         style={{ transform: `scaleX(${o})` }}
       />
       <span
-        className="ml-2 font-display text-[0.62rem] tracking-[0.02em] whitespace-nowrap text-accent uppercase transition-transform duration-500 sm:text-[0.68rem]"
-        style={{ transform: `translateX(${(1 - o) * 8}px)` }}
+        className={`font-display text-[0.62rem] tracking-[0.02em] whitespace-nowrap text-accent uppercase transition-transform duration-500 sm:text-[0.68rem] ${
+          mirrored ? "mr-2" : "ml-2"
+        }`}
+        style={{ transform: `translateX(${(1 - o) * (mirrored ? -8 : 8)}px)` }}
       >
         {label}
       </span>
@@ -135,24 +192,33 @@ function HeroCopy({
   ctaReveal: number;
 }) {
   return (
-    // On phones the copy lives under the video band, left aligned like the rest
-    // of the page. From sm up it returns to centred over the full-bleed clip.
-    <div className="relative mx-auto flex h-full w-full max-w-6xl items-start justify-center px-5 pt-[calc(4rem+56.25vw+2rem)] text-left sm:items-center sm:px-6 sm:pt-0 sm:text-center">
+    // On phones the copy sits over the bottom of the portrait band, where the
+    // gradient has already taken the footage down to near-black — so the frame
+    // reads as one image running into the text rather than a video with a hard
+    // edge and a caption under it. Left aligned, like the rest of the page.
+    // From sm up it returns to centred over the full-bleed clip.
+    <div className="relative mx-auto flex h-full w-full max-w-6xl items-start justify-center px-5 pt-[calc(4rem+var(--hero-band)-5.5rem)] text-left sm:items-center sm:px-6 sm:pt-0 sm:text-center">
       <div className="w-full max-w-2xl">
+        {/*
+          The max-height rules are for short phones (iPhone SE and older
+          Androids), where the band's svh ceiling has already given up height and
+          the copy still has to clear the fold inside an overflow-hidden pane.
+          Taller iPhones never match these and keep the full-size type.
+        */}
         <h1
-          className="font-display text-[1.6rem] leading-[1.1] font-medium tracking-[-0.035em] text-foreground transition-[opacity,filter,transform] duration-700 ease-out sm:text-[2.4rem] lg:text-[2.9rem]"
+          className="font-display text-[1.6rem] leading-[1.1] font-medium tracking-[-0.035em] text-foreground transition-[opacity,filter,transform] duration-700 ease-out [@media(max-height:700px)]:text-[1.4rem] sm:text-[2.4rem] lg:text-[2.9rem]"
           style={revealStyle(headlineReveal)}
         >
           {headline}
         </h1>
         <p
-          className="mt-5 max-w-md font-sans text-[0.88rem] leading-relaxed text-secondary-foreground transition-[opacity,filter,transform] duration-700 ease-out sm:mx-auto sm:mt-6 sm:text-[0.95rem]"
+          className="mt-5 max-w-md font-sans text-[0.88rem] leading-relaxed text-secondary-foreground transition-[opacity,filter,transform] duration-700 ease-out [@media(max-height:700px)]:mt-3 [@media(max-height:700px)]:text-[0.82rem] sm:mx-auto sm:mt-6 sm:text-[0.95rem]"
           style={revealStyle(subheadReveal)}
         >
           {subhead}
         </p>
         <div
-          className="mt-8 flex flex-wrap items-center gap-3 transition-[opacity,filter,transform] duration-700 ease-out sm:mt-10 sm:justify-center"
+          className="mt-8 flex flex-wrap items-center gap-3 transition-[opacity,filter,transform] duration-700 ease-out [@media(max-height:700px)]:mt-5 sm:mt-10 sm:justify-center"
           style={revealStyle(ctaReveal)}
         >
           <HeroCta />
@@ -169,8 +235,11 @@ export function Hero() {
   const target = useRef(0);
   const current = useRef(0);
   const [p, setP] = useState(0);
-  const [mobile, setMobile] = useState(false);
-  const [narrow, setNarrow] = useState(false);
+  // Named for what it actually is. This used to be called `mobile`, which read
+  // as "is a phone" but only ever tracked prefers-reduced-motion — so every real
+  // phone fell through to the landscape scrub path and pulled the 7.4 MB master.
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [phone, setPhone] = useState(false);
   // Set when the host can't serve byte ranges and we've had to pull the clip
   // down whole; see the effect below.
   const [blobSrc, setBlobSrc] = useState<string | null>(null);
@@ -181,17 +250,17 @@ export function Hero() {
     // ship reveal is the point of this section, and it only exists in the scrub
     // clip, so a touch device that skipped it saw a different page entirely.
     const mq = window.matchMedia(REDUCED_MOTION_MQ);
-    const sync = () => setMobile(mq.matches);
+    const sync = () => setReducedMotion(mq.matches);
     sync();
     setReady(true);
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
   }, []);
 
-  // Portrait needs the crop to travel: see heroObjectPosition below.
+  // Phones scrub the portrait cut; from sm up it's the landscape master.
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 639px)");
-    const sync = () => setNarrow(mq.matches);
+    const sync = () => setPhone(mq.matches);
     sync();
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
@@ -199,7 +268,7 @@ export function Hero() {
 
   // scroll -> progress
   useEffect(() => {
-    if (mobile) return;
+    if (reducedMotion) return;
     let raf = 0;
     const compute = () => {
       raf = 0;
@@ -221,7 +290,7 @@ export function Hero() {
       window.removeEventListener("resize", onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [mobile]);
+  }, [reducedMotion]);
 
   /*
    * Scrubbing needs a seekable source. A static host that answers `Range` with
@@ -232,7 +301,7 @@ export function Hero() {
    * blob URL instead, which is always seekable.
    */
   useEffect(() => {
-    if (mobile || !ready) return;
+    if (reducedMotion || !ready) return;
     let cancelled = false;
     let objectUrl: string | null = null;
 
@@ -257,12 +326,12 @@ export function Hero() {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [mobile, ready]);
+  }, [reducedMotion, ready]);
 
   // eased seek loop — the video timeline maps directly to scroll across the
   // whole hero, so the clip scrubs from its opening frame through to the end.
   useEffect(() => {
-    if (mobile) return;
+    if (reducedMotion) return;
     let raf = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
@@ -282,7 +351,7 @@ export function Hero() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [mobile]);
+  }, [reducedMotion]);
 
   // Staged reveal: the opening logo flythrough owns p 0 -> ~0.06, then the
   // headline, subhead, and CTA each blur-fade in over their own scroll band.
@@ -296,7 +365,7 @@ export function Hero() {
   const ctaReveal = clamp((p - 0.28) / 0.08) * hold;
   const dim = clamp((p - DIM_AT) / DIM_LEN);
 
-  if (ready && mobile) {
+  if (ready && reducedMotion) {
     return (
       // Stacked rather than overlaid: the footage owns the top of the screen and
       // dissolves into the page, then the copy sits on the page itself, left
@@ -346,57 +415,43 @@ export function Hero() {
     // which would otherwise re-run the scroll maths mid-scrub and jump the video.
     // The extra 40svh past the scrub is the hand-over: copy dissolves, footage dims.
     <section ref={sectionRef} id="top" className="relative h-[300svh]">
-      <div className="sticky top-0 h-[100svh] min-h-[560px] overflow-hidden bg-background">
+      <div
+        className="sticky top-0 h-[100svh] min-h-[560px] overflow-hidden bg-background"
+        // Published as a variable so the band and the copy that tucks under it
+        // are driven by one number and can't drift apart.
+        style={{ "--hero-band": PORTRAIT_BAND } as CSSProperties}
+      >
         {/*
-          The clip is 16:9. Stretched over a full-height portrait viewport,
-          object-cover has to scale it ~4x to cover and you end up inside a
-          couple of containers. Giving it a band roughly the height of the
-          reference layout brings the crop back to about half the frame, which
-          is the whole ship. From sm up it goes full bleed as before.
+          Phones get a fixed portrait band sized to the 4:5 cut's own aspect, so
+          the footage is shown whole rather than cropped a second time by CSS.
+          Nothing about this box animates: the previous version drove height, top
+          and object-position off scroll progress, which forced a layout and a
+          repaint on every frame of the scrub while the decoder was already busy
+          seeking. From sm up it's full bleed as before.
         */}
         <div
-          className="absolute inset-x-0 top-0 sm:inset-0 sm:h-full"
+          className="absolute inset-x-0 top-16 sm:inset-0 sm:top-0 sm:h-full"
           // Once the ship has finished its run the footage sinks to a backdrop
-          // for the Problem section rather than sliding away as a sheet.
-          //
-          // The height is portrait-only: at rest the band is the whole screen, so
-          // the logo the clip opens on lands dead centre exactly as it does on
-          // desktop. It then retracts to the clip's own 16:9 box — not an
-          // arbitrary slice — so the finished frame a phone sees is the same
-          // frame a desktop sees, and the deck callouts can share one set of
-          // anchors. The retract completes at p=0.30, which is exactly when the
-          // first callout appears. From sm up sm:h-full drives the height.
+          // for the Problem section rather than sliding away as a sheet. Only
+          // filter and opacity animate here — both composite without layout.
           style={{
             filter: `brightness(${1 - dim * 0.74}) saturate(${1 - dim * 0.5})`,
             opacity: 1 - dim * 0.55,
-            ...(narrow
-              ? {
-                  height: `calc(${(1 - clamp((p - 0.05) / 0.25)).toFixed(3)} * 100svh + ${clamp(
-                    (p - 0.05) / 0.25,
-                  ).toFixed(3)} * 100vw * 0.5625)`,
-                  // …and slides clear of the fixed nav as it shrinks, so the top
-                  // of the deck (and the Verified callout on it) isn't covered.
-                  top: `calc(${clamp((p - 0.05) / 0.25).toFixed(3)} * 4rem)`,
-                }
-              : {}),
+            ...(phone ? { height: "var(--hero-band)" } : {}),
           }}
         >
           <video
             ref={videoRef}
             className="absolute inset-0 h-full w-full object-cover object-center"
-            // Portrait crops the 16:9 frame hard, so a fixed crop can only suit
-            // one shot. The clip opens on the logo, centred in frame, then moves
-            // to the ship, which sits right of centre — so the crop travels with
-            // the scrub: dead centre while the logo is up, then over to the ship.
-            style={
-              narrow
-                ? { objectPosition: `${(50 + 18 * clamp((p - 0.06) / 0.22)).toFixed(1)}% center` }
-                : {}
-            }
-            poster={heroOpenPoster}
-            // Held back until hydration so the poster paints first and the 7.4 MB
-            // clip downloads behind it rather than blocking the view.
-            {...(ready ? { src: blobSrc ?? heroDesktopVideo } : {})}
+            // When the 54svh ceiling bites on a short viewport the band is
+            // shallower than the clip, so object-cover has to drop something.
+            // Biasing the crop high keeps the bow — which sits ~5% down the
+            // frame — and spends the loss on the empty water under the stern.
+            style={phone ? { objectPosition: "50% 15%" } : {}}
+            poster={phone ? heroPortraitPoster : heroOpenPoster}
+            // Held back until hydration so the poster paints first and the clip
+            // downloads behind it rather than blocking the view.
+            {...(ready ? { src: blobSrc ?? (phone ? heroPortraitVideo : heroDesktopVideo) } : {})}
             muted
             playsInline
             preload={ready ? "auto" : "none"}
@@ -404,7 +459,7 @@ export function Hero() {
           {/* Dissolves the band into the page on phones; no seam from sm up. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 sm:hidden"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 sm:hidden"
             style={{
               background:
                 "linear-gradient(to top, var(--background) 2%, color-mix(in oklab, var(--background) 55%, transparent) 45%, transparent 100%)",
@@ -412,18 +467,22 @@ export function Hero() {
           />
 
           {/*
-            Anchored to the deck. These live inside the band so they track the
-            footage in both layouts — and because the band settles at the clip's
-            own aspect, one set of anchors reads correctly on a phone and on a
-            desktop alike.
+            Anchored to the deck, inside the band so they track the footage. The
+            two crops frame the ship differently, so each gets its own anchors —
+            and on the portrait cut the labels run left into open water.
           */}
-          <div aria-hidden className="pointer-events-none absolute inset-0" style={{ opacity: hold }}>
-            {CALLOUTS.map((c) => (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{ opacity: hold }}
+          >
+            {(phone ? PORTRAIT_CALLOUTS : CALLOUTS).map((c) => (
               <WireCallout
                 key={c.label}
                 label={c.label}
                 x={c.x}
                 y={c.y}
+                side={phone ? "left" : "right"}
                 progress={clamp((p - c.at) / 0.09)}
               />
             ))}
