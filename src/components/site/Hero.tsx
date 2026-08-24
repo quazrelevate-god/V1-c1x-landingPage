@@ -171,6 +171,9 @@ export function Hero() {
   const [p, setP] = useState(0);
   const [mobile, setMobile] = useState(false);
   const [narrow, setNarrow] = useState(false);
+  // Set when the host can't serve byte ranges and we've had to pull the clip
+  // down whole; see the effect below.
+  const [blobSrc, setBlobSrc] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -219,6 +222,42 @@ export function Hero() {
       if (raf) cancelAnimationFrame(raf);
     };
   }, [mobile]);
+
+  /*
+   * Scrubbing needs a seekable source. A static host that answers `Range` with
+   * the whole file and a 200 (rather than 206) leaves the browser reporting
+   * `seekable` as empty, so every `currentTime` write is dropped and the hero
+   * freezes on its opening frame — which is what production did. Probe for
+   * range support once, and if it's missing fetch the clip whole and scrub a
+   * blob URL instead, which is always seekable.
+   */
+  useEffect(() => {
+    if (mobile || !ready) return;
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    (async () => {
+      try {
+        const probe = await fetch(heroDesktopVideo, { headers: { Range: "bytes=0-1" } });
+        if (cancelled || probe.status === 206) return;
+        const whole = await fetch(heroDesktopVideo);
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(await whole.blob());
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        setBlobSrc(objectUrl);
+      } catch {
+        /* offline or blocked — keep the direct src and its poster */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [mobile, ready]);
 
   // eased seek loop — the video timeline maps directly to scroll across the
   // whole hero, so the clip scrubs from its opening frame through to the end.
@@ -357,7 +396,7 @@ export function Hero() {
             poster={heroOpenPoster}
             // Held back until hydration so the poster paints first and the 7.4 MB
             // clip downloads behind it rather than blocking the view.
-            {...(ready ? { src: heroDesktopVideo } : {})}
+            {...(ready ? { src: blobSrc ?? heroDesktopVideo } : {})}
             muted
             playsInline
             preload={ready ? "auto" : "none"}
