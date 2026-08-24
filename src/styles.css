@@ -1,0 +1,476 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --font-display: "Switzer", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Svatopluk", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-elevated: var(--elevated);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-pressed: var(--accent-pressed);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-light-surface: var(--light-surface);
+  --color-light-surface-alt: var(--light-surface-alt);
+  --color-ink: var(--ink);
+}
+
+:root {
+  --radius: 0.5rem;
+
+  --background: oklch(0.145 0 0); /* #0A0A0A */
+  --foreground: oklch(0.945 0.008 120); /* #EDEFEA */
+  --card: oklch(0.196 0 0); /* #141414 */
+  --card-foreground: oklch(0.945 0.008 120);
+  --elevated: oklch(0.253 0 0); /* #1E1E1E */
+  --popover: oklch(0.196 0 0);
+  --popover-foreground: oklch(0.945 0.008 120);
+
+  --primary: oklch(0.855 0.166 116.5); /* #C4D82E */
+  --primary-foreground: oklch(0.145 0 0);
+  --accent: oklch(0.855 0.166 116.5);
+  --accent-foreground: oklch(0.145 0 0);
+  --accent-hover: oklch(0.897 0.152 114); /* #D6E85A */
+  --accent-pressed: oklch(0.713 0.147 117); /* #9CAD1F */
+
+  --secondary: oklch(0.253 0 0);
+  --secondary-foreground: oklch(0.845 0.014 130); /* #C1C8BE */
+  --muted: oklch(0.253 0 0);
+  --muted-foreground: oklch(0.635 0.019 130); /* #8A9285 */
+
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(0.335 0.011 130); /* #3A3F38 */
+  --input: oklch(0.335 0.011 130);
+  --ring: oklch(0.855 0.166 116.5);
+
+  --light-surface: oklch(0.945 0.008 120); /* #EDEFEA */
+  --light-surface-alt: oklch(0.955 0.011 85); /* #F4F1EC */
+  --ink: oklch(0.145 0 0);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.03em;
+    font-weight: 500;
+  }
+}
+
+/*
+ * Wide alpha ramps over a dark ground band badly: an 8-bit channel only has a
+ * few steps to cross, so the falloff shows as concentric rings. Two fixes, and
+ * neither touches the colour — a longer eased stop list so each step is
+ * smaller, and a faint noise tile that dithers whatever banding survives.
+ */
+@keyframes corridor-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
+@utility corridor-ping {
+  animation: corridor-ping 2.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@utility glow-dither {
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+  }
+}
+
+@utility corridor-glow {
+  position: relative;
+  isolation: isolate;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        60% 45% at 50% 100%,
+        color-mix(in oklab, var(--accent) 22%, transparent) 0%,
+        color-mix(in oklab, var(--accent) 19%, transparent) 18%,
+        color-mix(in oklab, var(--accent) 14%, transparent) 34%,
+        color-mix(in oklab, var(--accent) 8%, transparent) 48%,
+        color-mix(in oklab, var(--accent) 4%, transparent) 60%,
+        color-mix(in oklab, var(--accent) 1.5%, transparent) 71%,
+        transparent 84%
+      ),
+      radial-gradient(
+        35% 30% at 50% 108%,
+        color-mix(in oklab, var(--accent-hover) 18%, transparent) 0%,
+        color-mix(in oklab, var(--accent-hover) 14%, transparent) 22%,
+        color-mix(in oklab, var(--accent-hover) 9%, transparent) 40%,
+        color-mix(in oklab, var(--accent-hover) 4%, transparent) 56%,
+        color-mix(in oklab, var(--accent-hover) 1.5%, transparent) 70%,
+        transparent 84%
+      );
+  }
+}
+
+@utility corridor-glow-center {
+  position: relative;
+  isolation: isolate;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(
+      55% 50% at 50% 60%,
+      color-mix(in oklab, var(--accent) 14%, transparent) 0%,
+      color-mix(in oklab, var(--accent) 12%, transparent) 18%,
+      color-mix(in oklab, var(--accent) 8.5%, transparent) 34%,
+      color-mix(in oklab, var(--accent) 5%, transparent) 48%,
+      color-mix(in oklab, var(--accent) 2.5%, transparent) 60%,
+      color-mix(in oklab, var(--accent) 1%, transparent) 72%,
+      transparent 86%
+    );
+  }
+}
+
+@utility hairline-top {
+  border-top: 1px solid var(--color-border);
+}
+
+@utility reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  &[data-visible="true"] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@utility marquee-track {
+  animation: marquee 42s linear infinite;
+}
+
+/* ---------- motion ---------- */
+
+@keyframes glow-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translate3d(0, -3%, 0) scale(1.06);
+    opacity: 1;
+  }
+}
+
+@keyframes corridor-stream {
+  from {
+    transform: translate3d(0, 12%, 0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.55;
+  }
+  85% {
+    opacity: 0.35;
+  }
+  to {
+    transform: translate3d(0, -120%, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes dash-travel {
+  to {
+    stroke-dashoffset: -1000;
+  }
+}
+
+@utility glow-animate {
+  &::before {
+    animation: glow-drift 14s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    will-change: transform, opacity;
+  }
+}
+
+@utility corridor-particle {
+  animation: corridor-stream 11s linear infinite;
+  will-change: transform, opacity;
+}
+
+@utility word-rise {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(0.6em);
+  animation: word-rise-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes word-rise-in {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- hero ---------- */
+
+@keyframes hero-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility hero-line {
+  opacity: 0;
+  animation: hero-line-in 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes callout-box-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes callout-line-in {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes callout-label-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes callout-pulse {
+  0% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
+@keyframes callout-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -8px, 0);
+  }
+}
+
+@utility deal-callout {
+  animation: callout-float 7s ease-in-out 2s infinite;
+}
+
+@utility deal-callout-box {
+  opacity: 0;
+  animation: callout-box-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 700ms forwards;
+}
+
+@utility deal-callout-line {
+  transform: scaleX(0);
+  animation: callout-line-in 0.5s ease-out 1250ms forwards;
+}
+
+@utility deal-callout-label {
+  opacity: 0;
+  animation: callout-label-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) 1550ms forwards;
+}
+
+@utility deal-callout-pulse {
+  animation: callout-pulse 3.4s ease-out 2s infinite;
+}
+
+
+@media (max-width: 767px) {
+  .corridor-particle {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .word-rise {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --- Approach diagram motion --- */
+@keyframes dgm-dash {
+  to { stroke-dashoffset: -80; }
+}
+@keyframes dgm-pulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@keyframes dgm-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes dgm-sweep {
+  0% { opacity: 0; transform: translateY(-6px); }
+  20%, 60% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(10px); }
+}
+@keyframes dgm-draw {
+  0% { stroke-dashoffset: 220; }
+  45%, 100% { stroke-dashoffset: 0; }
+}
+@keyframes dgm-blink {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+@keyframes dgm-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes dgm-fill {
+  0% { height: 0%; }
+  60%, 100% { height: 100%; }
+}
+@keyframes dgm-bob {
+  0%, 100% { transform: translateY(0) rotate(-0.6deg); }
+  50% { transform: translateY(-3px) rotate(0.6deg); }
+}
+
+/* ---------- hero ambient backdrop ---------- */
+
+@keyframes hero-aura-drift-a {
+  0%, 100% { transform: translate3d(-6%, -4%, 0) scale(1); opacity: 0.55; }
+  50% { transform: translate3d(8%, 6%, 0) scale(1.15); opacity: 0.85; }
+}
+@keyframes hero-aura-drift-b {
+  0%, 100% { transform: translate3d(6%, 8%, 0) scale(1.1); opacity: 0.5; }
+  50% { transform: translate3d(-8%, -6%, 0) scale(1); opacity: 0.8; }
+}
+@keyframes hero-aura-drift-c {
+  0%, 100% { transform: translate3d(0, 10%, 0) scale(1.05); opacity: 0.35; }
+  50% { transform: translate3d(4%, -12%, 0) scale(1.2); opacity: 0.6; }
+}
+
+.hero-aura {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+  will-change: transform, opacity;
+}
+.hero-aura-a {
+  inset: -25% 30% 35% -20%;
+  background: radial-gradient(circle, color-mix(in oklab, var(--accent) 12%, transparent) 0%, transparent 70%);
+  animation: hero-aura-drift-a 34s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+.hero-aura-b {
+  inset: 30% -15% -25% 35%;
+  background: radial-gradient(circle, color-mix(in oklab, oklch(0.5 0.09 175) 26%, transparent) 0%, transparent 70%);
+  animation: hero-aura-drift-b 46s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+.hero-aura-c {
+  inset: 10% 10% 10% 20%;
+  background: radial-gradient(circle, color-mix(in oklab, var(--accent) 7%, transparent) 0%, transparent 68%);
+  animation: hero-aura-drift-c 58s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
