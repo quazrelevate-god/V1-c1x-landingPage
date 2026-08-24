@@ -266,6 +266,10 @@ export function Hero() {
     return () => mq.removeEventListener("change", sync);
   }, []);
 
+  // One source of truth for which cut is in play: the <video>, the range probe,
+  // and the poster all read from here, so they can't drift onto different clips.
+  const heroSrc = phone ? heroPortraitVideo : heroDesktopVideo;
+
   // scroll -> progress
   useEffect(() => {
     if (reducedMotion) return;
@@ -299,17 +303,25 @@ export function Hero() {
    * freezes on its opening frame — which is what production did. Probe for
    * range support once, and if it's missing fetch the clip whole and scrub a
    * blob URL instead, which is always seekable.
+   *
+   * This has to pull the same cut the <video> is showing. Railway is one of the
+   * hosts that ignores ranges, so this path is live in production: fetching the
+   * landscape master here would hand a phone the 7.4 MB 16:9 clip through the
+   * back door, undoing both the portrait crop and the weight saving.
    */
   useEffect(() => {
     if (reducedMotion || !ready) return;
     let cancelled = false;
     let objectUrl: string | null = null;
+    // Drop any blob made for the other cut, so a viewport that crosses the
+    // breakpoint can't keep scrubbing the wrong footage.
+    setBlobSrc(null);
 
     (async () => {
       try {
-        const probe = await fetch(heroDesktopVideo, { headers: { Range: "bytes=0-1" } });
+        const probe = await fetch(heroSrc, { headers: { Range: "bytes=0-1" } });
         if (cancelled || probe.status === 206) return;
-        const whole = await fetch(heroDesktopVideo);
+        const whole = await fetch(heroSrc);
         if (cancelled) return;
         objectUrl = URL.createObjectURL(await whole.blob());
         if (cancelled) {
@@ -326,7 +338,7 @@ export function Hero() {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [reducedMotion, ready]);
+  }, [reducedMotion, ready, heroSrc]);
 
   // eased seek loop — the video timeline maps directly to scroll across the
   // whole hero, so the clip scrubs from its opening frame through to the end.
@@ -451,7 +463,7 @@ export function Hero() {
             poster={phone ? heroPortraitPoster : heroOpenPoster}
             // Held back until hydration so the poster paints first and the clip
             // downloads behind it rather than blocking the view.
-            {...(ready ? { src: blobSrc ?? (phone ? heroPortraitVideo : heroDesktopVideo) } : {})}
+            {...(ready ? { src: blobSrc ?? heroSrc } : {})}
             muted
             playsInline
             preload={ready ? "auto" : "none"}
