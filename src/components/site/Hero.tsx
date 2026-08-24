@@ -15,6 +15,7 @@ import heroDesktopVideo from "@/assets/hero-desktop.mp4";
 // that made scrubbing the master on a phone stutter.
 import heroPortraitVideo from "@/assets/hero-mobile.mp4";
 import heroPortraitPoster from "@/assets/hero-mobile-poster.jpg";
+import { APERTURE_END, PHONE_MQ } from "@/lib/hero-timing";
 import { HeroAperture } from "./HeroAperture";
 import { REDUCED_MOTION_MQ } from "./primitives";
 
@@ -80,7 +81,6 @@ const DIM_LEN = 0.2;
  * after its own logo moment, at VIDEO_START, so the ship is what shows through
  * the growing window.
  */
-const APERTURE_END = 0.26;
 /** Where the clip's fly-through has finished and the ship run begins. */
 const VIDEO_START = 0.55;
 
@@ -327,7 +327,7 @@ export function Hero() {
 
   // Phones scrub the portrait cut; from sm up it's the landscape master.
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 639px)");
+    const mq = window.matchMedia(PHONE_MQ);
     const sync = () => setPhone(mq.matches);
     sync();
     mq.addEventListener("change", sync);
@@ -457,7 +457,18 @@ export function Hero() {
   // fades away and the footage itself dims to a backdrop — the hero hands over
   // by dissolving rather than sliding off as a sheet.
   const outro = clamp((p - OUTRO_AT) / OUTRO_LEN);
-  const hold = 1 - outro;
+  /*
+   * Phones don't dissolve the foreground.
+   *
+   * The last callout lands at 0.62 and the dissolve began at 0.70 — about 136px
+   * of scroll between "Secured" arriving and everything starting to fade, which
+   * is not long enough to read it. Rather than push the dissolve later and eat
+   * the rest of the section, the copy and callouts now simply hold: they fade in
+   * and stay until the sticky pane scrolls away on its own. The footage still
+   * dims underneath, which is the hand-over to the Problem section rather than
+   * content disappearing.
+   */
+  const hold = phone ? 1 : 1 - outro;
   // The copy can't start before the aperture has cleared on a phone, or it
   // blur-fades in on top of the cover with the reveal still running behind it.
   const copyAt = phone ? APERTURE_END + 0.02 : 0.08;

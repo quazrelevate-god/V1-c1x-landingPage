@@ -1,39 +1,99 @@
-import { Eyebrow, ParallaxGlow, Reveal, Section } from "../primitives";
+import { Eyebrow, ParallaxGlow, Reveal, Section, useCountUp, useInView } from "../primitives";
 
 const sectors = [
   {
     code: "AGR",
     label: "Agriculture",
-    size: "$2.4T",
-    goods: "Wheat, rice, corn, soybeans · cotton, rubber · coffee, tea, cocoa · edible oils · spices, seeds, pulses",
+    /** Addressable value in USD trillions — drives both the figure and the bar. */
+    tn: 2.4,
+    goods:
+      "Wheat, rice, corn, soybeans · cotton, rubber · coffee, tea, cocoa · edible oils · spices, seeds, pulses",
   },
   {
     code: "MIN",
     label: "Minerals & Mining",
-    size: "$1.8T",
-    goods: "Gold, silver, platinum · copper, zinc, nickel · iron ore, bauxite · lithium, cobalt · rare earths",
+    tn: 1.8,
+    goods:
+      "Gold, silver, platinum · copper, zinc, nickel · iron ore, bauxite · lithium, cobalt · rare earths",
   },
   {
     code: "ENR",
     label: "Energy",
-    size: "$3.1T",
-    goods: "Crude oil, diesel, petrol · LNG, LPG, natural gas · coal, petcoke · biofuels, ethanol · energy certificates",
+    tn: 3.1,
+    goods:
+      "Crude oil, diesel, petrol · LNG, LPG, natural gas · coal, petcoke · biofuels, ethanol · energy certificates",
   },
   {
     code: "IND",
     label: "Industrial Materials",
-    size: "$1.2T",
-    goods: "Steel, aluminium, scrap · timber, pulp · chemicals, polymers · cement, aggregates · fertilizers",
+    tn: 1.2,
+    goods:
+      "Steel, aluminium, scrap · timber, pulp · chemicals, polymers · cement, aggregates · fertilizers",
   },
   {
     code: "FDP",
     label: "Food & Consumer",
-    size: "$8.7T",
-    goods: "Dairy, meat, seafood · frozen & processed foods · sugar, salt, starch · packaged & organic goods",
+    tn: 8.7,
+    goods:
+      "Dairy, meat, seafood · frozen & processed foods · sugar, salt, starch · packaged & organic goods",
   },
 ];
 
+const MAX = Math.max(...sectors.map((s) => s.tn));
+const TOTAL = sectors.reduce((sum, s) => sum + s.tn, 0);
+
+/**
+ * One sector as a measured row: the figure counts up and the rule draws out to
+ * its share of the largest market, so the page carries the comparison visually
+ * instead of asking the reader to hold five numbers in their head.
+ */
+function SectorRow({ s, index }: { s: (typeof sectors)[number]; index: number }) {
+  const { ref, inView } = useInView<HTMLDivElement>(0.4);
+  // useCountUp is integer-only, so count tenths and place the point on the way out.
+  const tenths = useCountUp(Math.round(s.tn * 10), inView, 1100 + index * 90);
+
+  return (
+    <div
+      ref={ref}
+      className="grid grid-cols-[3.25rem_1fr] gap-x-4 border-t border-border py-7 sm:gap-x-8"
+    >
+      <span className="pt-1 font-display text-[0.72rem] tracking-[0.06em] text-accent uppercase">
+        {s.code}
+      </span>
+
+      <div>
+        <div className="flex items-baseline justify-between gap-4">
+          <h3 className="font-display text-lg font-medium tracking-tight text-foreground sm:text-xl">
+            {s.label}
+          </h3>
+          <span className="font-display text-lg tracking-tight text-foreground tabular-nums sm:text-xl">
+            ${(tenths / 10).toFixed(1)}T
+          </span>
+        </div>
+
+        {/* Decorative: the figure beside it already states the value. */}
+        <div aria-hidden className="mt-3 h-[3px] w-full overflow-hidden rounded-full bg-border/60">
+          <div
+            className="h-full rounded-full bg-accent"
+            style={{
+              width: inView ? `${(s.tn / MAX) * 100}%` : "0%",
+              transition: `width 1100ms cubic-bezier(0.22,1,0.36,1) ${index * 90}ms`,
+            }}
+          />
+        </div>
+
+        <p className="mt-4 font-sans text-sm leading-relaxed text-secondary-foreground">
+          {s.goods}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function Markets() {
+  const { ref, inView } = useInView<HTMLDivElement>(0.5);
+  const total = useCountUp(Math.round(TOTAL * 10), inView, 1400);
+
   return (
     <Section id="markets" className="hairline-top relative overflow-hidden">
       <ParallaxGlow speed={0.5} intensity={12} />
@@ -44,33 +104,37 @@ export function Markets() {
             Five sectors. One verification standard.
           </h2>
           <p className="mt-6 max-w-2xl font-sans text-base leading-relaxed text-secondary-foreground">
-            C1X serves five commodity sectors across the India–UAE corridor, with Africa and global enterprise
-            markets on the expansion path. Each sector carries the same structural pain — fragmented discovery,
-            informal trust, and slow, opaque intermediation. One platform, one verification standard, and one
-            confidential deal engine address all five.
+            C1X serves five commodity sectors across the India–UAE corridor, with Africa and global
+            enterprise markets on the expansion path. Each sector carries the same structural pain —
+            fragmented discovery, informal trust, and slow, opaque intermediation. One platform, one
+            verification standard, and one confidential deal engine address all five.
           </p>
         </Reveal>
       </div>
 
-      <div className="mt-16 grid gap-6 divide-y divide-border border-t border-border sm:grid-cols-2 sm:gap-0 sm:divide-x sm:divide-y-0 lg:grid-cols-3">
+      <Reveal delay={100}>
+        <div ref={ref} className="mt-14 flex items-baseline gap-4 border-b border-accent/30 pb-6">
+          <span className="font-display text-[2.5rem] leading-none font-medium tracking-[-0.04em] text-accent tabular-nums sm:text-[3.5rem]">
+            ${(total / 10).toFixed(1)}T
+          </span>
+          <span className="font-display text-sm leading-snug tracking-tight text-muted-foreground">
+            addressable across the five
+            <br className="hidden sm:block" /> sectors C1X operates in
+          </span>
+        </div>
+      </Reveal>
+
+      <div className="mt-4">
         {sectors.map((s, i) => (
-          <Reveal key={s.code} delay={i * 90}>
-            <div className="h-full px-0 pt-8 sm:px-8 sm:first:pl-0">
-              <div className="flex items-baseline justify-between font-display tracking-tight">
-                <span className="text-[0.72rem] uppercase tracking-[0.02em] text-accent">{s.code}</span>
-                <span className="text-sm text-muted-foreground">{s.size}</span>
-              </div>
-              <h3 className="mt-3 font-display text-lg font-medium tracking-tight text-foreground">{s.label}</h3>
-              <p className="mt-3 font-sans text-sm leading-relaxed text-secondary-foreground">{s.goods}</p>
-            </div>
-          </Reveal>
+          <SectorRow key={s.code} s={s} index={i} />
         ))}
       </div>
 
-      <Reveal delay={sectors.length * 90}>
-        <p className="mt-14 max-w-3xl font-sans text-sm leading-relaxed text-muted-foreground">
-          India domestic deal cycles are active today. The India–UAE corridor is coming online via a UAE entity and
-          cross-border escrow. Africa corridors and global enterprise reach are next on the expansion path.
+      <Reveal delay={120}>
+        <p className="mt-14 max-w-3xl border-l-2 border-accent pl-6 font-sans text-sm leading-relaxed text-muted-foreground">
+          India domestic deal cycles are active today. The India–UAE corridor is coming online via a
+          UAE entity and cross-border escrow. Africa corridors and global enterprise reach are next
+          on the expansion path.
         </p>
       </Reveal>
     </Section>

@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Nav } from "@/components/site/Nav";
 import { Hero } from "@/components/site/Hero";
 
-
 import { Problem } from "@/components/site/Problem";
 import { Approach } from "@/components/site/Approach";
 import { HowAiWorks } from "@/components/site/HowAiWorks";
@@ -14,6 +13,7 @@ import { WhyUs } from "@/components/site/WhyUs";
 import { Faq } from "@/components/site/Faq";
 import { FinalCta } from "@/components/site/FinalCta";
 import { Footer } from "@/components/site/Footer";
+import { WaitlistPrompt } from "@/components/site/WaitlistPrompt";
 
 const title = "Corridor One X: Verified Commodity Trade Infrastructure";
 const description =
@@ -40,7 +40,6 @@ function Index() {
       <Hero />
 
       <main className="relative z-10 bg-background">
-
         <Problem />
         <Approach />
         <HowAiWorks />
@@ -55,7 +54,8 @@ function Index() {
       <div className="relative z-10 bg-background">
         <Footer />
       </div>
+      {/* Home only: it keys off the hero's scroll, and there is no hero elsewhere. */}
+      <WaitlistPrompt />
     </div>
   );
 }
-

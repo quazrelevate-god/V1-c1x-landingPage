@@ -32,16 +32,34 @@ export function Pillars() {
           </Reveal>
         </div>
 
-        <div className="mt-16 grid gap-x-8 gap-y-10 sm:grid-cols-2">
+        {/*
+          Numbered and ruled rather than four equal cards: the ordinal gives the
+          eye somewhere to land and turns a grid of similar-looking paragraphs
+          into a list that reads as deliberate structure.
+        */}
+        <ol className="mt-16 grid gap-x-10 gap-y-12 sm:grid-cols-2">
           {pillars.map((p, i) => (
             <Reveal key={p.title} delay={i * 110}>
-              <div className="h-full border-t border-ink/15 pt-7">
-                <h3 className="font-display text-xl font-medium tracking-tight text-ink">{p.title}</h3>
-                <p className="mt-3 font-sans text-sm leading-relaxed text-ink/65">{p.body}</p>
-              </div>
+              <li className="group relative h-full pt-8">
+                <span
+                  aria-hidden
+                  className="absolute inset-x-0 top-0 h-px bg-ink/15 transition-colors duration-500 group-hover:bg-accent"
+                />
+                <div className="flex items-start gap-5">
+                  <span className="font-display text-[0.72rem] leading-none tracking-[0.06em] text-accent tabular-nums">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <div>
+                    <h3 className="font-display text-xl leading-snug font-medium tracking-tight text-ink">
+                      {p.title}
+                    </h3>
+                    <p className="mt-3 font-sans text-sm leading-relaxed text-ink/65">{p.body}</p>
+                  </div>
+                </div>
+              </li>
             </Reveal>
           ))}
-        </div>
+        </ol>
       </div>
     </section>
   );

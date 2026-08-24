@@ -16,7 +16,8 @@ export function AboutCta() {
               Built for the long corridor, not the quick close.
             </h2>
             <p className="mt-7 max-w-md font-sans text-base leading-relaxed text-secondary-foreground">
-              See how a verified deal moves through Corridor One X, from requirement to funds release.
+              See how a verified deal moves through Corridor One X, from requirement to funds
+              release.
             </p>
             <div className="mt-9">
               <a
@@ -32,8 +33,12 @@ export function AboutCta() {
             <div className="grid gap-8 border-t border-border pt-8 sm:grid-cols-2">
               {badges.map((b) => (
                 <div key={b.title}>
-                  <h3 className="font-display text-base font-medium tracking-tight text-foreground">{b.title}</h3>
-                  <p className="mt-2 font-sans text-sm leading-relaxed text-muted-foreground">{b.body}</p>
+                  <h3 className="font-display text-base font-medium tracking-tight text-foreground">
+                    {b.title}
+                  </h3>
+                  <p className="mt-2 font-sans text-sm leading-relaxed text-muted-foreground">
+                    {b.body}
+                  </p>
                 </div>
               ))}
             </div>

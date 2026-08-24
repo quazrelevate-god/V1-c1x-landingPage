@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 import logo from "@/assets/logo.png";
+import { APERTURE_END, PHONE_MQ, heroProgress } from "@/lib/hero-timing";
+import { REDUCED_MOTION_MQ } from "./primitives";
 
 const links = [
   { label: "How It Works", href: "/#how-it-works" },
@@ -20,7 +22,8 @@ export function Nav() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px), (prefers-reduced-motion: reduce)");
+    const still = window.matchMedia(REDUCED_MOTION_MQ);
+    const phoneMq = window.matchMedia(PHONE_MQ);
     setReady(true);
 
     const onScroll = () => {
@@ -28,14 +31,24 @@ export function Nav() {
       const threshold = hero ? hero.offsetTop + hero.offsetHeight - 72 : 24;
       setScrolled(window.scrollY > threshold);
 
-      // On desktop the nav fades in quickly as the hero scrub begins.
-      if (mq.matches || !hero) {
+      // No hero on this route, or the visitor has asked for less motion: the nav
+      // is simply there.
+      if (!hero || still.matches) {
         setReveal(1);
         return;
       }
-      const total = hero.offsetHeight - window.innerHeight;
-      const prog = clamp(-hero.getBoundingClientRect().top / Math.max(total, 1));
-      setReveal(clamp(prog / 0.06));
+      const prog = heroProgress() ?? 1;
+      /*
+       * Phones hold the nav back until the opening reveal has finished.
+       *
+       * The mark grows to fill the screen, and a nav sitting on top of it cuts
+       * across the artwork — which it did, because this used to switch the
+       * reveal off entirely below 768px and pin the nav fully opaque from the
+       * first frame. It now waits for the aperture to clear and then slides
+       * down. Landscape keeps fading in as the scrub starts, where there is no
+       * full-bleed mark to collide with.
+       */
+      setReveal(phoneMq.matches ? clamp((prog - APERTURE_END) / 0.05) : clamp(prog / 0.06));
     };
 
     onScroll();
@@ -53,9 +66,18 @@ export function Nav() {
   return (
     <header
       className={`fixed inset-x-0 top-0 z-50 transition-colors duration-500 ${
-        scrolled ? "border-b border-border bg-background/85 backdrop-blur-xl" : "border-b border-transparent"
+        scrolled
+          ? "border-b border-border bg-background/85 backdrop-blur-xl"
+          : "border-b border-transparent"
       }`}
-      style={{ opacity, pointerEvents: opacity < 0.05 ? "none" : undefined }}
+      style={{
+        opacity,
+        // Slides down rather than only fading, so it arrives as its own beat
+        // once the reveal has cleared instead of materialising in place.
+        transform: `translateY(${((1 - opacity) * -100).toFixed(2)}%)`,
+        transition: "transform 300ms ease-out",
+        pointerEvents: opacity < 0.05 ? "none" : undefined,
+      }}
     >
       <nav className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-5 py-3 sm:h-18 sm:gap-6 sm:px-6 sm:py-4">
         <a href="/" className="flex items-center" aria-label="Corridor One X home">

@@ -50,10 +50,30 @@ export function Leadership() {
           {founders.map((f, i) => (
             <Reveal key={f.name} delay={i * 130}>
               <div className="h-full border-t border-ink/15 pt-7">
-                <h3 className="font-display text-xl font-medium tracking-tight text-ink">{f.name}</h3>
-                <p className="mt-1 font-display text-[0.72rem] uppercase tracking-[0.02em] text-accent">{f.role}</p>
-                <p className="mt-3 font-sans text-sm text-ink/55">{f.credentials}</p>
-                <p className="mt-5 font-sans text-sm leading-relaxed text-ink/70">{f.bio}</p>
+                {/*
+                  A monogram stands in for the portrait these cards would
+                  otherwise want. Two names and two paragraphs side by side read
+                  as an undifferentiated block; an initial gives each one an
+                  anchor and lets the eye tell them apart at a glance.
+                */}
+                <div className="flex items-center gap-4">
+                  <span
+                    aria-hidden
+                    className="grid h-12 w-12 shrink-0 place-items-center rounded-full border border-accent/45 bg-accent/10 font-display text-lg font-medium tracking-tight text-ink"
+                  >
+                    {f.name.charAt(0)}
+                  </span>
+                  <div>
+                    <h3 className="font-display text-xl font-medium tracking-tight text-ink">
+                      {f.name}
+                    </h3>
+                    <p className="mt-0.5 font-display text-[0.72rem] tracking-[0.06em] text-accent uppercase">
+                      {f.role}
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-5 font-sans text-sm text-ink/55">{f.credentials}</p>
+                <p className="mt-4 font-sans text-sm leading-relaxed text-ink/70">{f.bio}</p>
               </div>
             </Reveal>
           ))}
@@ -61,12 +81,16 @@ export function Leadership() {
 
         <div className="mt-20 border-t border-ink/15 pt-12">
           <Reveal>
-            <h3 className="font-display text-sm uppercase tracking-[0.02em] text-ink/50">Operating Doctrine</h3>
+            <h3 className="font-display text-sm uppercase tracking-[0.02em] text-ink/50">
+              Operating Doctrine
+            </h3>
           </Reveal>
           <div className="mt-8 grid gap-x-8 gap-y-8 sm:grid-cols-3">
             {doctrine.map((d, i) => (
               <Reveal key={d.title} delay={i * 110}>
-                <h4 className="font-display text-base font-medium tracking-tight text-ink">{d.title}</h4>
+                <h4 className="font-display text-base font-medium tracking-tight text-ink">
+                  {d.title}
+                </h4>
                 <p className="mt-2 font-sans text-sm leading-relaxed text-ink/65">{d.body}</p>
               </Reveal>
             ))}
