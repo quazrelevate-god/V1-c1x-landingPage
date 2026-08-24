@@ -122,7 +122,7 @@ DEMO_WEBHOOK_URL=https://script.google.com/macros/s/AKfycb..../exec
 **Production** — add the same variable in your host's environment settings
 (Lovable project settings; Cloudflare → Workers & Pages → your project →
 Settings → Variables and Secrets, added as a **Secret**; or Railway → the
-`landing` service → Variables), then redeploy.
+`web` service → Variables), then redeploy.
 
 > **Railway note.** This app is built by Nitro, which targets Cloudflare Workers
 > by default. The Railway service therefore also sets `NITRO_PRESET=node-server`
