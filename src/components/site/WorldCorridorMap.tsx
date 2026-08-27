@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import data from "./world-dots.json";
 import { useInView } from "./primitives";
 
 type Dot = { x: number; y: number; t?: number };
 type Region = { name: string; x: number; y: number; t: number };
+type WorldData = { width: number; height: number; points: Dot[]; regions?: Region[] };
+type Built = { base: string; live: string[]; soon: string[]; regions: Region[] };
 
 /** Which way each label leans off its anchor, so neighbours don't collide. */
 const LABEL_SIDE: Record<string, "left" | "right" | "above"> = {
@@ -14,7 +15,11 @@ const LABEL_SIDE: Record<string, "left" | "right" | "above"> = {
   Australia: "right",
 };
 
-const { width } = data;
+// The source art's frame is fixed, so the viewBox — and therefore the box's
+// aspect ratio — are known without loading the 264 KB dot data. That lets the
+// SVG reserve its height on first paint (no layout shift) while the heavy data
+// is fetched lazily, only once the map nears the viewport.
+const MAP_WIDTH = 238;
 // Trim the empty southern ocean below the last highlighted landmass (Tasmania).
 const height = 106;
 
@@ -32,13 +37,19 @@ const dotAt = (x: number, y: number, r: number) =>
  * The base landmass is one static path. The highlighted corridors are split
  * into concentric waves radiating out from the India–Gulf corridor, so they can
  * switch on in sequence and read as the network populating.
+ *
+ * Built from the dot data on demand rather than at module load: the base path
+ * alone is ~578 KB of coordinates — the single largest DOM payload on the page —
+ * and it sits well below the fold, so there is nothing to gain from paying for
+ * it (in the SSR document, the JS bundle, or main-thread build time) before the
+ * visitor has scrolled anywhere near it.
  */
-function buildPaths() {
+function buildPaths(data: WorldData): Built {
   let base = "";
   const live: Dot[] = [];
   const soon: Dot[] = [];
 
-  for (const p of data.points as Dot[]) {
+  for (const p of data.points) {
     if (p.y > height) continue;
     const t = p.t ?? 0;
     if (t === 1) live.push(p);
@@ -60,14 +71,10 @@ function buildPaths() {
     return waves;
   };
 
-  return { base, live: spread(live, 0.38), soon: spread(soon, 0.32) };
+  return { base, live: spread(live, 0.38), soon: spread(soon, 0.32), regions: data.regions ?? [] };
 }
 
-const { base: basePath, live: liveWaves, soon: soonWaves } = buildPaths();
-
-const regions = (data.regions ?? []) as Region[];
-
-const FULL_VIEW = `0 0 ${width} ${height}`;
+const FULL_VIEW = `0 0 ${MAP_WIDTH} ${height}`;
 /**
  * Narrow screens crop to the corridors that matter (Europe through Australia)
  * so the country shapes stay legible instead of shrinking to a smudge.
@@ -84,6 +91,8 @@ export function WorldCorridorMap() {
   const [view, setView] = useState(FULL_VIEW);
   const { ref, inView } = useInView<HTMLDivElement>(0.25);
   const frame = frameOf(view);
+  // Null until the dot data is imported and turned into paths (see below).
+  const [built, setBuilt] = useState<Built | null>(null);
 
   useEffect(() => {
     // Matches the hero's width cutoff: the full world map is unreadable on a phone
@@ -95,6 +104,28 @@ export function WorldCorridorMap() {
     return () => mq.removeEventListener("change", sync);
   }, []);
 
+  // Build the dot field on the client, once, after hydration — NOT gated on
+  // scroll. The map must be present wherever its section is, exactly as it was
+  // when server-rendered; deferring only the *build* keeps its ~578 KB of path
+  // data out of the SSR document and its 264 KB source out of the main bundle,
+  // while the map's existence never rides on an observer firing. It's a dynamic
+  // import, so it still lands after first paint rather than blocking it.
+  useEffect(() => {
+    let cancelled = false;
+    import("./world-dots.json")
+      .then((m) => {
+        if (!cancelled) setBuilt(buildPaths((m.default ?? m) as WorldData));
+      })
+      .catch(() => {
+        /* offline or chunk fetch failed — the map just doesn't populate */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const regions = built?.regions ?? [];
+
   return (
     <div ref={ref} className="relative w-full">
       <svg
@@ -103,29 +134,35 @@ export function WorldCorridorMap() {
         role="img"
         aria-label="World map highlighting active regions in India, the Middle East and Africa, with Europe and Australia coming soon"
       >
-        <path d={basePath} fill={BASE} opacity={0.85} />
-        {soonWaves.map((d, i) => (
-          <path
-            key={`s${i}`}
-            d={d}
-            fill={SOON}
-            style={{
-              opacity: inView ? 0.7 : 0,
-              transition: `opacity 420ms linear ${360 + i * 78}ms`,
-            }}
-          />
-        ))}
-        {liveWaves.map((d, i) => (
-          <path
-            key={`l${i}`}
-            d={d}
-            fill={ACTIVE}
-            style={{
-              opacity: inView ? 0.95 : 0,
-              transition: `opacity 380ms linear ${i * 78}ms`,
-            }}
-          />
-        ))}
+        {built ? (
+          <>
+            {/* The base landmass is on the instant it builds — its visibility
+                never rides on the reveal timing, so the map can't come up blank. */}
+            <path d={built.base} fill={BASE} opacity={0.85} />
+            {built.soon.map((d, i) => (
+              <path
+                key={`s${i}`}
+                d={d}
+                fill={SOON}
+                style={{
+                  opacity: inView ? 0.7 : 0,
+                  transition: `opacity 420ms linear ${360 + i * 78}ms`,
+                }}
+              />
+            ))}
+            {built.live.map((d, i) => (
+              <path
+                key={`l${i}`}
+                d={d}
+                fill={ACTIVE}
+                style={{
+                  opacity: inView ? 0.95 : 0,
+                  transition: `opacity 380ms linear ${i * 78}ms`,
+                }}
+              />
+            ))}
+          </>
+        ) : null}
       </svg>
 
       {/*

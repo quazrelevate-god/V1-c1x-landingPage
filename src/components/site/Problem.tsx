@@ -1,5 +1,4 @@
 import { Eyebrow, Parallax, ParallaxGlow, Reveal, Section } from "./primitives";
-import problemImg from "@/assets/problem.jpg";
 
 const cards = [
   "Deals negotiated with zero identity verification.",

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { registerScrollEffect, type ScrollEffect } from "@/lib/scroll-motion";
 
 /**
  * Devices that must not run scroll-driven parallax: touch hardware stutters on
@@ -48,7 +49,10 @@ export function useCountUp(to: number, active: boolean, duration = 1600) {
 
   useEffect(() => {
     if (!active) return;
-    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
       setValue(to);
       return;
     }
@@ -67,33 +71,126 @@ export function useCountUp(to: number, active: boolean, duration = 1600) {
   return value;
 }
 
+/**
+ * Drives one element's `--py` from scroll, through the shared motion engine.
+ *
+ * `measureRef` is read for position; `applyRef` is written (the two differ for
+ * ParallaxImage, where the frame is measured but the oversized <img> inside it
+ * moves — so the transform never feeds back into the measurement). Only visible
+ * elements are measured, and everything switches off together when the engine
+ * decides the device can't hold the frame rate.
+ */
+function useParallax(
+  measureRef: RefObject<HTMLElement | null>,
+  applyRef: RefObject<HTMLElement | null>,
+  speed: number,
+  scale = 1,
+  mobile: "off" | "half" = "off",
+) {
+  useEffect(() => {
+    const measure = measureRef.current;
+    const apply = applyRef.current;
+    if (!measure || !apply) return;
+
+    const mobileMq = window.matchMedia("(max-width: 767px)");
+    let isMobile = mobileMq.matches;
+    let visible = true;
+    let offset = 0;
+    // Parallax is disabled outright on phones for the "off" variant; the "half"
+    // variant (oversized imagery) still drifts, at half the travel.
+    const disabled = () => mobile === "off" && isMobile;
+
+    const effect: ScrollEffect = {
+      read: () => {
+        if (!visible || disabled()) return;
+        const r = measure.getBoundingClientRect();
+        const center = r.top + r.height / 2 - window.innerHeight / 2;
+        let raw = -center * speed * (mobile === "half" && isMobile ? 0.5 : 1);
+        if (scale > 1) {
+          // Never travel past the oversized image's hidden margin, so no edge shows.
+          const limit = Math.max(((scale - 1) / 2) * r.height - 1, 0);
+          raw = Math.min(Math.max(raw, -limit), limit);
+        }
+        offset = raw;
+      },
+      write: () => {
+        apply.style.setProperty("--py", disabled() ? "0px" : `${offset.toFixed(2)}px`);
+      },
+      reset: () => {
+        apply.style.setProperty("--py", "0px");
+      },
+    };
+
+    // Skip the layout read entirely while the element is nowhere near the fold.
+    const io = new IntersectionObserver(
+      (entries) => {
+        visible = entries[0]?.isIntersecting ?? true;
+      },
+      { rootMargin: "25% 0px 25% 0px" },
+    );
+    io.observe(measure);
+
+    const onMq = () => {
+      isMobile = mobileMq.matches;
+      if (disabled()) apply.style.setProperty("--py", "0px");
+    };
+    mobileMq.addEventListener("change", onMq);
+
+    const unregister = registerScrollEffect(effect);
+    return () => {
+      unregister();
+      io.disconnect();
+      mobileMq.removeEventListener("change", onMq);
+    };
+  }, [measureRef, applyRef, speed, scale, mobile]);
+}
+
 /** Scroll progress (0 to 1) of an element travelling through the viewport. */
 export function useScrollProgress<T extends HTMLElement = HTMLDivElement>() {
   const ref = useRef<T>(null);
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    let raf = 0;
-    const compute = () => {
-      raf = 0;
-      const r = el.getBoundingClientRect();
-      const vh = window.innerHeight;
-      const total = r.height + vh * 0.5;
-      const p = (vh * 0.85 - r.top) / total;
-      setProgress(Math.min(Math.max(p, 0), 1));
+    const node = ref.current;
+    if (!node) return;
+    let visible = true;
+    let value = 0;
+    let painted = -1;
+
+    const effect: ScrollEffect = {
+      read: () => {
+        if (!visible) return;
+        const r = node.getBoundingClientRect();
+        const vh = window.innerHeight;
+        const total = r.height + vh * 0.5;
+        const p = (vh * 0.85 - r.top) / total;
+        value = Math.min(Math.max(p, 0), 1);
+      },
+      write: () => {
+        // Only re-render React when the value has actually moved.
+        if (Math.abs(value - painted) < 0.002) return;
+        painted = value;
+        setProgress(value);
+      },
+      // No scroll animation: show the flow fully populated rather than empty.
+      reset: () => {
+        painted = 1;
+        setProgress(1);
+      },
     };
-    const onScroll = () => {
-      if (!raf) raf = requestAnimationFrame(compute);
-    };
-    compute();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        visible = entries[0]?.isIntersecting ?? true;
+      },
+      { rootMargin: "10% 0px 10% 0px" },
+    );
+    io.observe(node);
+
+    const unregister = registerScrollEffect(effect);
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      if (raf) cancelAnimationFrame(raf);
+      unregister();
+      io.disconnect();
     };
   }, []);
 
@@ -111,35 +208,10 @@ export function Parallax({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [offset, setOffset] = useState(0);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const mq = window.matchMedia("(max-width: 767px), (prefers-reduced-motion: reduce)");
-    if (mq.matches) return;
-    let raf = 0;
-    const compute = () => {
-      raf = 0;
-      const r = el.getBoundingClientRect();
-      const center = r.top + r.height / 2 - window.innerHeight / 2;
-      setOffset(-center * speed);
-    };
-    const onScroll = () => {
-      if (!raf) raf = requestAnimationFrame(compute);
-    };
-    compute();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [speed]);
+  useParallax(ref, ref, speed);
 
   return (
-    <div ref={ref} className={className} style={{ transform: `translate3d(0, ${offset.toFixed(2)}px, 0)` }}>
+    <div ref={ref} className={className} style={{ transform: "translate3d(0, var(--py, 0px), 0)" }}>
       {children}
     </div>
   );
@@ -190,14 +262,20 @@ export function WordRise({
           style={{ animationDelay: `${delay + i * step}ms` }}
         >
           {w}
-          {i < words.length - 1 ? "\u00A0" : ""}
+          {i < words.length - 1 ? " " : ""}
         </span>
       ))}
     </span>
   );
 }
 
-export function Eyebrow({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
+export function Eyebrow({
+  children,
+  tone = "dark",
+}: {
+  children: ReactNode;
+  tone?: "dark" | "light";
+}) {
   return (
     <p
       className={`font-display text-[0.72rem] uppercase tracking-[0.02em] ${
@@ -252,41 +330,14 @@ export function ParallaxImage({
   width?: number;
   height?: number;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [offset, setOffset] = useState(0);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (mq.matches) return;
-    let raf = 0;
-    const compute = () => {
-      raf = 0;
-      const r = el.getBoundingClientRect();
-      const center = r.top + r.height / 2 - window.innerHeight / 2;
-      const mobile = window.matchMedia("(max-width: 767px)").matches;
-      const raw = -center * speed * (mobile ? 0.5 : 1);
-      // never travel past the oversized image's hidden margin, so no edge is revealed
-      const limit = Math.max(((scale - 1) / 2) * r.height - 1, 0);
-      setOffset(Math.min(Math.max(raw, -limit), limit));
-    };
-    const onScroll = () => {
-      if (!raf) raf = requestAnimationFrame(compute);
-    };
-    compute();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [speed, scale]);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  useParallax(frameRef, imgRef, speed, scale, "half");
 
   return (
-    <div ref={ref} className={`relative overflow-hidden bg-background ${className}`}>
+    <div ref={frameRef} className={`relative overflow-hidden bg-background ${className}`}>
       <img
+        ref={imgRef}
         src={src}
         alt={alt}
         loading={loading}
@@ -294,7 +345,7 @@ export function ParallaxImage({
         height={height}
         className={`absolute inset-0 h-full w-full object-cover will-change-transform ${imgClassName}`}
         style={{
-          transform: `translate3d(0, ${offset.toFixed(2)}px, 0) scale(${scale})`,
+          transform: `translate3d(0, var(--py, 0px), 0) scale(${scale})`,
         }}
       />
       {children}

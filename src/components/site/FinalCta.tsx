@@ -1,26 +1,51 @@
-import { Parallax, Reveal } from "./primitives";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useMotionEnabled } from "@/lib/scroll-motion";
+import { Parallax, Reveal, useInView } from "./primitives";
 import ctaPoster from "@/assets/hero-port.jpg";
 import ctaVideo from "@/assets/hero-loop.mp4";
 
 export function FinalCta() {
+  const { ref, inView } = useInView<HTMLElement>(0.1);
+  const isMobile = useIsMobile();
+  const motionEnabled = useMotionEnabled();
+  // The 2.5 MB loop only earns its bytes on a screen that can see it move: it
+  // sits at opacity-35 behind two gradients and a lime glow, so on a phone —
+  // where the data cost is highest — the poster still is all but indistinguish-
+  // able. Load the clip only on desktop, with motion on, once scrolled to it;
+  // everyone else gets the still. Before this the video autoplayed and pulled
+  // its full weight on first paint, on every device, for a section at the very
+  // bottom of the page.
+  const showVideo = inView && !isMobile && motionEnabled;
+
   return (
     <section
+      ref={ref}
       id="book-a-demo"
       className="corridor-glow glow-animate relative overflow-hidden px-5 py-24 sm:px-6 sm:py-32 md:py-44"
     >
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <Parallax speed={0.35} className="absolute -inset-y-[30%] inset-x-0">
-        <video
-          className="h-full w-full scale-125 object-cover opacity-35"
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="none"
-          poster={ctaPoster}
-        >
-          <source src={ctaVideo} type="video/mp4" />
-        </video>
+          {showVideo ? (
+            <video
+              className="h-full w-full scale-125 object-cover opacity-35"
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="none"
+              poster={ctaPoster}
+            >
+              <source src={ctaVideo} type="video/mp4" />
+            </video>
+          ) : (
+            <img
+              src={ctaPoster}
+              alt=""
+              aria-hidden
+              loading="lazy"
+              className="h-full w-full scale-125 object-cover opacity-35"
+            />
+          )}
         </Parallax>
         <div className="absolute inset-0 bg-background/75" />
         <div className="absolute inset-0 bg-gradient-to-b from-background via-background/60 to-background" />
@@ -42,8 +67,8 @@ export function FinalCta() {
         </Reveal>
         <Reveal delay={100}>
           <p className="mx-auto mt-7 max-w-xl font-sans text-base leading-relaxed text-secondary-foreground">
-            Whether you move 50 tonnes or 5,000, you get the same verification, the same protection, and the same
-            direct access to the global market.
+            Whether you move 50 tonnes or 5,000, you get the same verification, the same protection,
+            and the same direct access to the global market.
           </p>
         </Reveal>
         <Reveal delay={180}>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { reportFrameDelta, useMotionEnabled } from "@/lib/scroll-motion";
 // Shown only to visitors who have asked their OS to reduce motion: a plain
 // autoplay loop with no scrubbing, so it never seeks and never needs the scrub
 // master. Everyone else downloads neither of these two files.
@@ -19,7 +20,6 @@ import heroPortraitPoster from "@/assets/hero-mobile-poster.jpg";
 import { APERTURE_END, PHONE_MQ } from "@/lib/hero-timing";
 import { HeroAperture } from "./HeroAperture";
 import { HeroLoader } from "./HeroLoader";
-import { REDUCED_MOTION_MQ } from "./primitives";
 
 /*
  * How long the loading gate will wait before opening regardless.
@@ -335,11 +335,16 @@ export function Hero() {
   const bandRef = useRef<HTMLDivElement>(null);
   const target = useRef(0);
   const current = useRef(0);
+  // Restarts the eased seek loop when a scroll moves the target; the loop parks
+  // itself once the clip has caught up, so it isn't a rAF running forever.
+  const seekKick = useRef<(() => void) | null>(null);
   const [p, setP] = useState(0);
-  // Named for what it actually is. This used to be called `mobile`, which read
-  // as "is a phone" but only ever tracked prefers-reduced-motion — so every real
-  // phone fell through to the landscape scrub path and pulled the 7.4 MB master.
-  const [reducedMotion, setReducedMotion] = useState(false);
+  // No scrub, no scroll animation — the visitor prefers reduced motion, or the
+  // device can't hold a smooth frame rate. Both are decided by the shared motion
+  // engine (which folds prefers-reduced-motion in), so the hero, the parallax
+  // and every other scroll effect switch together.
+  const motionEnabled = useMotionEnabled();
+  const staticHero = !motionEnabled;
   const [phone, setPhone] = useState(false);
   // Set when the host can't serve byte ranges and we've had to pull the clip
   // down whole; see the effect below.
@@ -352,15 +357,12 @@ export function Hero() {
   const [bufferedPct, setBufferedPct] = useState(0);
 
   useEffect(() => {
-    // Only reduced-motion users get the static hero now. Phones scrub too — the
-    // ship reveal is the point of this section, and it only exists in the scrub
-    // clip, so a touch device that skipped it saw a different page entirely.
-    const mq = window.matchMedia(REDUCED_MOTION_MQ);
-    const sync = () => setReducedMotion(mq.matches);
-    sync();
+    // Held back until hydration so the poster paints before the clip is wired
+    // up. Whether this device animates at all is the motion engine's call now
+    // (reduced-motion preference or measured frame rate), read through
+    // `motionEnabled` above — phones still scrub, since the ship reveal is the
+    // whole point of the section and only exists in the scrub clip.
     setReady(true);
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
   }, []);
 
   // Phones scrub the portrait cut; from sm up it's the landscape master.
@@ -384,7 +386,7 @@ export function Hero() {
    */
   useEffect(() => {
     if (!ready) return;
-    if (!phone || reducedMotion) {
+    if (!phone || staticHero) {
       setGateOpen(true);
       return;
     }
@@ -455,7 +457,7 @@ export function Hero() {
     };
     // heroSrc deliberately absent: it is declared below this effect, and `phone`
     // already covers every case in which it changes.
-  }, [ready, phone, reducedMotion]);
+  }, [ready, phone, staticHero]);
 
   // Drop the gate from the tree once it has faded, rather than leaving a
   // full-screen fixed layer parked over the page for the rest of the session.
@@ -499,7 +501,7 @@ export function Hero() {
 
   // scroll -> progress
   useEffect(() => {
-    if (reducedMotion) return;
+    if (staticHero) return;
     let raf = 0;
     const compute = () => {
       raf = 0;
@@ -509,6 +511,8 @@ export function Hero() {
       const v = clamp(-el.getBoundingClientRect().top / Math.max(total, 1));
       target.current = v;
       setP(v);
+      // Wake the eased seek loop so the clip follows the new target.
+      seekKick.current?.();
     };
     const onScroll = () => {
       if (!raf) raf = requestAnimationFrame(compute);
@@ -521,7 +525,7 @@ export function Hero() {
       window.removeEventListener("resize", onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [reducedMotion]);
+  }, [staticHero]);
 
   /*
    * Scrubbing needs a seekable source. A static host that answers `Range` with
@@ -537,7 +541,7 @@ export function Hero() {
    * back door, undoing both the portrait crop and the weight saving.
    */
   useEffect(() => {
-    if (reducedMotion || !ready) return;
+    if (staticHero || !ready) return;
     // A cross-origin CDN is neither probeable nor in need of probing. Both
     // fetches here would be blocked without a CORS policy on the bucket, so the
     // fallback could never build its blob anyway — and it has nothing to fix:
@@ -571,38 +575,69 @@ export function Hero() {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [reducedMotion, ready, heroSrc]);
+  }, [staticHero, ready, heroSrc]);
 
   // eased seek loop — the video timeline maps directly to scroll across the
   // whole hero, so the clip scrubs from its opening frame through to the end.
   useEffect(() => {
-    if (reducedMotion) return;
+    if (staticHero) return;
     let raf = 0;
-    const tick = () => {
-      raf = requestAnimationFrame(tick);
+    let last = 0;
+    const tick = (ts: number) => {
+      raf = 0;
+      const dt = last ? ts - last : 16.67;
+      last = ts;
+      // The scrub is the heaviest thing on the page, so its frame timing is what
+      // the motion budget most needs to hear: a device that can't seek the clip
+      // smoothly gets switched to the static hero on the next render.
+      reportFrameDelta(dt);
       const v = videoRef.current;
-      if (!v) return;
-      const dur = v.duration;
-      if (!dur || Number.isNaN(dur)) return;
-      current.current += (target.current - current.current) * 0.12;
-      const end = dur - 0.05;
-      // On a phone the aperture owns the opening, so the clip holds on its first
-      // frame until the window has cleared, then runs its whole length across the
-      // scroll that remains. Landscape maps the whole timeline to the whole hero.
-      const t = phone
-        ? clamp((current.current - APERTURE_END) / (SCRUB_END - APERTURE_END)) * end
-        : clamp(current.current / SCRUB_END) * end;
-      if (Math.abs(v.currentTime - t) > 1 / 60) {
-        try {
-          v.currentTime = t;
-        } catch {
-          /* seek not ready */
+      const dur = v?.duration;
+      if (v && dur && !Number.isNaN(dur)) {
+        // Frame-rate-independent easing: the clip takes the same wall-clock time
+        // to catch the scroll on a 60Hz and a 144Hz display, rather than easing
+        // proportionally faster the more frames a screen happens to paint.
+        const k = 1 - Math.pow(1 - 0.12, dt / 16.67);
+        current.current += (target.current - current.current) * k;
+        const end = dur - 0.05;
+        // On a phone the aperture owns the opening, so the clip holds on its
+        // first frame until the window has cleared, then runs its whole length
+        // across the remaining scroll. Landscape maps the whole timeline to the
+        // whole hero.
+        const t = phone
+          ? clamp((current.current - APERTURE_END) / (SCRUB_END - APERTURE_END)) * end
+          : clamp(current.current / SCRUB_END) * end;
+        if (Math.abs(v.currentTime - t) > 1 / 60) {
+          try {
+            v.currentTime = t;
+          } catch {
+            /* seek not ready */
+          }
         }
       }
+      // Idle-stop: the old loop kept a rAF alive for the life of the page,
+      // seeking the clip on every frame forever. Now it only spins while the
+      // clip is still catching up to the scroll, then parks until the next
+      // scroll kicks it back to life.
+      if (Math.abs(target.current - current.current) > 0.0005) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        last = 0;
+      }
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [reducedMotion, phone]);
+    const kick = () => {
+      if (!raf) {
+        last = 0;
+        raf = requestAnimationFrame(tick);
+      }
+    };
+    seekKick.current = kick;
+    kick();
+    return () => {
+      seekKick.current = null;
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [staticHero, phone]);
 
   // Staged reveal: the opening logo flythrough owns p 0 -> ~0.06, then the
   // headline, subhead, and CTA each blur-fade in over their own scroll band.
@@ -632,7 +667,7 @@ export function Hero() {
   // 0 -> 1 across the aperture's own band; at 1 the cover unmounts itself.
   const apertureProgress = p / APERTURE_END;
 
-  if (ready && reducedMotion) {
+  if (ready && staticHero) {
     return (
       // Stacked rather than overlaid: the footage owns the top of the screen and
       // dissolves into the page, then the copy sits on the page itself, left
