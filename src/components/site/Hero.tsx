@@ -28,8 +28,14 @@ import { REDUCED_MOTION_MQ } from "./primitives";
  * failed decode, a dead connection or a browser that simply declines to preload
  * would leave the visitor on a black screen with a bar that never fills. This is
  * the ceiling, not the expectation — a cached load clears it in milliseconds.
+ *
+ * Generous, because what it is waiting for is the whole clip rather than merely
+ * a playable prefix: 1.5 MB over a weak mobile connection can genuinely take ten
+ * seconds, and opening early lands the visitor back on the stuck first frame
+ * this gate exists to prevent. Serving the clip from an origin that honours
+ * range requests removes the wait altogether — see docs/cdn-setup.md.
  */
-const GATE_TIMEOUT_MS = 8000;
+const GATE_TIMEOUT_MS = 20000;
 
 /*
  * Wait this long before showing the gate at all.
@@ -393,20 +399,40 @@ export function Hero() {
       setGateOpen(true);
     };
 
+    /*
+     * The gate waits for the clip to be buffered end to end, not merely
+     * playable.
+     *
+     * canplaythrough and readyState 4 both mean "enough buffered to play
+     * forwards at normal speed", which is not what this hero does — it seeks.
+     * A seek needs the target bytes either already buffered or fetchable with a
+     * range request, and the origin serving this clip answers a Range with the
+     * whole file and a 200. So on a first visit the browser could not fetch the
+     * bytes a seek landed on, every currentTime write was dropped, and the
+     * footage sat on its first frame while the callouts named a ship that never
+     * moved. On a second visit the file came from cache already complete and it
+     * scrubbed perfectly — which is exactly the shape of this bug.
+     *
+     * Requiring a single buffered range that spans the whole clip removes the
+     * ambiguity: once it holds, every seek the scrub can ask for is local.
+     */
     const progress = () => {
       const d = v.duration;
       if (!d || Number.isNaN(d)) return;
       const end = v.buffered.length ? v.buffered.end(v.buffered.length - 1) : 0;
       setBufferedPct(Math.min(end / d, 1));
-      // readyState is the honest signal — buffered can reach the end while the
-      // decoder still has work to do.
-      if (v.readyState >= 4) open();
+      // One range, not merely first-start and last-end: buffered [[0,1.5],[4,6]]
+      // satisfies both ends while leaving a hole in the middle that a seek can
+      // land in, which is the same failure with extra steps.
+      const spansWholeClip =
+        v.buffered.length === 1 && v.buffered.start(0) <= 0.05 && end >= d - 0.15;
+      if (spansWholeClip) open();
     };
 
     progress();
-    v.addEventListener("canplaythrough", open);
     v.addEventListener("progress", progress);
     v.addEventListener("loadeddata", progress);
+    v.addEventListener("canplaythrough", progress);
     // Never trap the visitor: a decode failure or a stalled connection opens the
     // gate on the same terms as success.
     v.addEventListener("error", open);
