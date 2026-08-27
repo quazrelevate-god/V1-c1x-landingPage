@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { reportFrameDelta, useMotionEnabled } from "@/lib/scroll-motion";
-import { videoSrc } from "@/lib/media";
+import { MEDIA_BASE, videoSrc } from "@/lib/media";
 // Shown only to visitors who have asked their OS to reduce motion: a plain
 // autoplay loop with no scrubbing, so it never seeks and never needs the scrub
 // master. Everyone else downloads neither of these two files.
@@ -364,14 +364,19 @@ export function Hero() {
    *
    * Everything in this section is driven by scroll, so without this the reveal
    * opens onto an empty window and the callouts start naming a ship that has not
-   * loaded — which is what made the opening look broken rather than slow. Phones
-   * only: landscape streams the master over byte ranges and is watchable long
-   * before it is complete, so gating it would be a delay with nothing to show
-   * for it.
+   * loaded — which is what made the opening look broken rather than slow.
+   *
+   * This only ever matters for a source that can't stream: a same-origin
+   * fallback host answering a Range with the whole file and a 200. When the
+   * clips are served from the CDN (MEDIA_BASE set) they stream over real byte
+   * ranges and are watchable long before they're complete, so — on phones as on
+   * desktop — gating would be a delay with nothing to show for it. The landscape
+   * master is never gated either way. So the gate engages only for a phone on
+   * the bundled fallback with no CDN, which is local dev, not production.
    */
   useEffect(() => {
     if (!ready) return;
-    if (!phone || staticHero) {
+    if (!phone || staticHero || MEDIA_BASE) {
       setGateOpen(true);
       return;
     }
