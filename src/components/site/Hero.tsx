@@ -314,6 +314,9 @@ function HeroCopy({
 
 export function Hero() {
   const sectionRef = useRef<HTMLElement>(null);
+  // The pinned pane. Measured instead of the window so the scrub maths can't be
+  // moved by mobile browser chrome; see `total` in the scroll effect.
+  const pinnedRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   // The footage's own box — what the aperture centres its opening on.
   const bandRef = useRef<HTMLDivElement>(null);
@@ -530,7 +533,21 @@ export function Hero() {
       raf = 0;
       const el = sectionRef.current;
       if (!el) return;
-      const total = el.offsetHeight - window.innerHeight;
+      /*
+       * Measure the pinned pane, never the window.
+       *
+       * The section is 300svh and the pane inside it is 100svh, so both are
+       * pegged to the small viewport and move together — the ratio between them
+       * is the same whether or not the browser's chrome is showing. Subtracting
+       * `window.innerHeight` instead mixed two different units: the section
+       * stayed put while the window grew by 60-100px the moment the URL bar
+       * collapsed, so the entire scroll-to-timeline mapping shifted underneath
+       * the visitor and the clip jumped about half a second — repeatedly, since
+       * the bar hides and returns as you scroll. That is the stutter, and it was
+       * worst on Android, where the bar is tallest and toggles most eagerly.
+       */
+      const pinned = pinnedRef.current;
+      const total = el.offsetHeight - (pinned ? pinned.offsetHeight : window.innerHeight);
       const v = clamp(-el.getBoundingClientRect().top / Math.max(total, 1));
       target.current = v;
       setP(v);
@@ -790,6 +807,10 @@ export function Hero() {
           footage dims. */}
       <section ref={sectionRef} id="top" className="relative h-[300svh]">
         <div
+          ref={pinnedRef}
+          // Marked so heroProgress() can measure the same pane the scrub does;
+          // see the note on `total` in the scroll effect.
+          data-hero-pin=""
           className="sticky top-0 h-[100svh] min-h-[560px] overflow-hidden bg-background"
           // Published as a variable so the band and the copy that tucks under it
           // are driven by one number and can't drift apart.

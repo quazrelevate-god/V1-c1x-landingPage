@@ -30,6 +30,12 @@ export const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
 export function heroProgress(): number | null {
   const hero = document.getElementById("top");
   if (!hero) return null;
-  const total = hero.offsetHeight - window.innerHeight;
+  // Measured against the hero's own pinned pane rather than the window, so this
+  // agrees with the scrub and doesn't shift when mobile browser chrome hides.
+  // Both are sized in svh; `window.innerHeight` is not, and mixing the two moved
+  // the mapping mid-scroll. The static hero has no pinned pane, and no scroll
+  // range either, so it falls back to the window and reads 0 throughout.
+  const pinned = hero.querySelector<HTMLElement>("[data-hero-pin]");
+  const total = hero.offsetHeight - (pinned ? pinned.offsetHeight : window.innerHeight);
   return clamp01(-hero.getBoundingClientRect().top / Math.max(total, 1));
 }
