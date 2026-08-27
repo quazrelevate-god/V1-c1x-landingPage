@@ -122,31 +122,46 @@ New URL, no purge needed, and the previous version stays reachable for rollback.
 
 ---
 
-## What stays bundled, and why
+## What goes on the CDN, and what stays bundled
+
+Every video is served from the CDN when `VITE_MEDIA_BASE` is set. Upload all
+three under their plain filenames — a missing one is a broken hero, not a
+fallback (see the warning below).
 
 | Asset | Size | Served from |
 |---|---:|---|
-| `hero-desktop.mp4` | 7.4 MB | CDN when `VITE_MEDIA_BASE` is set |
-| `hero-mobile.mp4` | 1.6 MB | bundle |
-| `hero-loop.mp4` | 2.4 MB | bundle |
+| `hero-desktop.mp4` | 2.0 MB | **CDN** when `VITE_MEDIA_BASE` is set |
+| `hero-mobile.mp4` | 1.4 MB | **CDN** when `VITE_MEDIA_BASE` is set |
+| `hero-desktop-480.mp4` | 487 KB | **CDN** when `VITE_MEDIA_BASE` is set |
 | `hero-port.jpg` | 176 KB | bundle |
 | `logo.png` | 36 KB | bundle |
 | `hero-open-poster.jpg` | 16 KB | bundle |
-| `hero-mobile-poster.jpg` | 12 KB | bundle |
+| `hero-mobile-poster.jpg` | 60 KB | bundle |
 
-- **The two posters paint before any video arrives.** Moving a 12 KB file to a
+- **The posters paint before any video arrives.** Moving a 16 KB file to a
   second origin adds a DNS lookup, TCP connect and TLS handshake — roughly
   200–300 ms — to the first thing the visitor sees. That is a net loss.
-- **`hero-loop.mp4` and `hero-port.jpg` only render under
-  `prefers-reduced-motion`.** A normal visitor never downloads them, so moving
-  them would speed up nobody.
-- **Everything except the master is ~2% of shipped bytes**, and bundling keeps
-  Vite's content-hashed `immutable` caching, which a CDN origin gives up.
+- **Posters keep Vite's content-hashed `immutable` caching**, which a CDN
+  origin gives up.
 
-Note that `hero-desktop.mp4` is still emitted into the build output even when
-the CDN is in use — the import remains as the fallback path. It costs deploy
-image size, not visitor bandwidth: with the variable set, no browser requests
-it.
+> **Upload all three, or don't set the variable.** With `VITE_MEDIA_BASE` set
+> there is no automatic fallback to the bundled copy: the loading gate is
+> skipped, and the range probe ignores cross-origin sources. A 404 on any one
+> clip leaves that viewport's hero frozen on its poster. Verify each after
+> uploading:
+>
+> ```
+> for f in hero-desktop.mp4 hero-mobile.mp4 hero-desktop-480.mp4; do
+>   curl -sI -H 'Range: bytes=0-1' "$VITE_MEDIA_BASE/$f" | head -1
+> done
+> ```
+>
+> All three must answer `206 Partial Content`. A `200` means the origin ignores
+> ranges and the scrubbed clips will not seek; a `404` means you missed one.
+
+The videos are still emitted into the build output even when the CDN is in use —
+the imports remain as the local-dev path. That costs deploy image size, not
+visitor bandwidth: with the variable set, no browser requests them.
 
 ## Assets that ship to nobody
 

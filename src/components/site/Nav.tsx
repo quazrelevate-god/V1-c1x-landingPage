@@ -33,7 +33,13 @@ export function Nav() {
 
       // No hero on this route, or the visitor has asked for less motion: the nav
       // is simply there.
-      if (!hero || still.matches) {
+      //
+      // The range check covers the hero's static layout, which is one screen
+      // tall and so has no scroll range to measure a reveal against: without it
+      // heroProgress() reads 0 for the whole section and the nav stays
+      // invisible at the top of the page until the visitor scrolls.
+      const range = hero ? hero.offsetHeight - window.innerHeight : 0;
+      if (!hero || still.matches || range <= 1) {
         setReveal(1);
         return;
       }

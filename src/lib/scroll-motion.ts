@@ -33,6 +33,8 @@ const SLOW_FRAME_LIMIT = 24;
 // Keep ticking this long after the last scroll, so a burst is measured across
 // contiguous frames — and momentum stays smooth — before the loop idles out.
 const IDLE_OUT_MS = 140;
+// Frames the startup probe collects before it judges the device.
+const PROBE_FRAMES = 20;
 
 export type ScrollEffect = {
   /** Read layout / compute the target. Must not write to the DOM. */
@@ -144,8 +146,7 @@ function probeIdleFrameRate() {
     whenVisible(probeIdleFrameRate);
     return;
   }
-  let frames = 0;
-  let acc = 0;
+  const samples: number[] = [];
   let last = 0;
   const step = (ts: number) => {
     if (document.hidden) {
@@ -154,15 +155,22 @@ function probeIdleFrameRate() {
       return;
     }
     if (last) {
-      acc += ts - last;
-      frames += 1;
+      const dt = ts - last;
+      // Same filter the live loop uses: a long gap is a stall, not a frame rate.
+      if (dt > 0 && dt <= 100) samples.push(dt);
     }
     last = ts;
-    if (frames < 16) {
+    if (samples.length < PROBE_FRAMES) {
       requestAnimationFrame(step);
       return;
     }
-    if (acc / frames > SLOW_FRAME_MS) {
+    // Median, not mean. This runs moments after hydration, alongside the world
+    // map turning 12k points into half a megabyte of SVG path — one 200ms hitch
+    // in that window would drag an average past the threshold and condemn a
+    // perfectly capable desktop to the static page. A median shrugs it off and
+    // still catches a device that is genuinely slow every frame.
+    samples.sort((a, b) => a - b);
+    if (samples[samples.length >> 1]! > SLOW_FRAME_MS) {
       capable = false;
       recomputeMotion();
     }

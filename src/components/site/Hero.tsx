@@ -329,7 +329,23 @@ export function Hero() {
   // engine (which folds prefers-reduced-motion in), so the hero, the parallax
   // and every other scroll effect switch together.
   const motionEnabled = useMotionEnabled();
-  const staticHero = !motionEnabled;
+  /*
+   * Whether the hero renders its static one-screen layout instead of the 300svh
+   * scrub.
+   *
+   * This deliberately lags `motionEnabled`. The two layouts are different
+   * heights — 300svh against one screen — so swapping while the visitor is
+   * inside the hero deletes about two screens of document under them: the
+   * browser clamps the scroll position and they are teleported mid-gesture into
+   * whatever now occupies that offset. And mid-hero is exactly when a swap is
+   * most likely, because the video scrub is the loudest reporter into the motion
+   * budget. So the swap is only ever applied at the top of the page, where both
+   * layouts start in the same place and the change is invisible; if the device
+   * is judged slow while the visitor is further down, the animation stops (that
+   * part is immediate) and the layout follows the next time they are back at the
+   * top.
+   */
+  const [staticHero, setStaticHero] = useState(false);
   const [phone, setPhone] = useState(false);
   // Set when the host can't serve byte ranges and we've had to pull the clip
   // down whole; see the effect below.
@@ -349,6 +365,25 @@ export function Hero() {
     // whole point of the section and only exists in the scrub clip.
     setReady(true);
   }, []);
+
+  // Apply a motion change to the hero's layout only while the page is at the
+  // top; see the note on `staticHero`. At mount that is already true, so a
+  // reduced-motion visitor gets the static hero on their first paint.
+  useEffect(() => {
+    const wanted = !motionEnabled;
+    if (wanted === staticHero) return;
+    const applyIfSafe = () => {
+      if (window.scrollY > 4) return false;
+      setStaticHero(wanted);
+      return true;
+    };
+    if (applyIfSafe()) return;
+    const onScroll = () => {
+      if (applyIfSafe()) window.removeEventListener("scroll", onScroll);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [motionEnabled, staticHero]);
 
   // Phones scrub the portrait cut; from sm up it's the landscape master.
   useEffect(() => {
@@ -569,7 +604,10 @@ export function Hero() {
   // eased seek loop — the video timeline maps directly to scroll across the
   // whole hero, so the clip scrubs from its opening frame through to the end.
   useEffect(() => {
-    if (staticHero) return;
+    // Gated on `motionEnabled` as well as the layout: when the device is judged
+    // slow the seeking must stop immediately, even though the layout swap waits
+    // until the visitor is back at the top of the page.
+    if (staticHero || !motionEnabled) return;
     let raf = 0;
     let last = 0;
     const tick = (ts: number) => {
@@ -622,11 +660,24 @@ export function Hero() {
     };
     seekKick.current = kick;
     kick();
+    /*
+     * The loop parks once the clip has caught up, and only a scroll wakes it —
+     * so anything that resets the video out from under a parked loop would
+     * otherwise leave the hero stranded on frame 0 until the visitor scrolled
+     * again. Both happen in practice: swapping to the blob source reloads the
+     * element, and `duration` arriving late means the earliest passes had
+     * nothing to seek against. Wake it on each.
+     */
+    const v = videoRef.current;
+    v?.addEventListener("loadedmetadata", kick);
+    v?.addEventListener("durationchange", kick);
     return () => {
       seekKick.current = null;
+      v?.removeEventListener("loadedmetadata", kick);
+      v?.removeEventListener("durationchange", kick);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [staticHero, phone]);
+  }, [staticHero, motionEnabled, phone, blobSrc]);
 
   // Staged reveal: the opening logo flythrough owns p 0 -> ~0.06, then the
   // headline, subhead, and CTA each blur-fade in over their own scroll band.
