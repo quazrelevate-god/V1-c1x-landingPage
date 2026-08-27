@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { reportFrameDelta, useMotionEnabled } from "@/lib/scroll-motion";
+import { useMotionEnabled } from "@/lib/scroll-motion";
 import { MEDIA_BASE, videoSrc } from "@/lib/media";
 // Shown only to visitors who have asked their OS to reduce motion: a plain
 // autoplay loop with no scrubbing, so it never seeks and never needs the scrub
 // master. Everyone else downloads neither of these two files.
 import heroReducedMotionVideo from "@/assets/hero-desktop-480.mp4";
-import heroReducedMotionPoster from "@/assets/hero-port.jpg";
 // hero-desktop.mp4's own opening frame. The scrub sits at t=0 until you move, so
 // the poster has to be that same frame or the hero visibly jumps once the 7.4 MB
 // clip finishes loading.
@@ -614,10 +613,6 @@ export function Hero() {
       raf = 0;
       const dt = last ? ts - last : 16.67;
       last = ts;
-      // The scrub is the heaviest thing on the page, so its frame timing is what
-      // the motion budget most needs to hear: a device that can't seek the clip
-      // smoothly gets switched to the static hero on the next render.
-      reportFrameDelta(dt);
       const v = videoRef.current;
       const dur = v?.duration;
       if (v && dur && !Number.isNaN(dur)) {
@@ -679,6 +674,40 @@ export function Hero() {
     };
   }, [staticHero, motionEnabled, phone, blobSrc]);
 
+  /*
+   * Spin the decoder up so seeks actually paint on iOS.
+   *
+   * WebKit will not render a seeked frame on a video that has never played —
+   * `currentTime` moves, the picture doesn't — so the hero looked frozen on its
+   * poster while the scroll scrubbed away underneath. This is every browser on
+   * an iPhone, not just Safari: Chrome, Brave and Edge on iOS are all WebKit.
+   * Muted and playsInline means autoplay is allowed, so start it once and pause
+   * on the next tick; the scrub then owns `currentTime` from a warm decoder.
+   */
+  useEffect(() => {
+    if (staticHero || !ready) return;
+    const v = videoRef.current;
+    if (!v) return;
+    let primed = false;
+    const prime = () => {
+      if (primed) return;
+      primed = true;
+      try {
+        const started = v.play();
+        if (started && typeof started.then === "function") {
+          started.then(() => v.pause()).catch(() => undefined);
+        } else {
+          v.pause();
+        }
+      } catch {
+        /* autoplay refused — the scrub still works wherever it wasn't needed */
+      }
+    };
+    if (v.readyState >= 1) prime();
+    v.addEventListener("loadedmetadata", prime);
+    return () => v.removeEventListener("loadedmetadata", prime);
+  }, [staticHero, ready, blobSrc, heroSrc]);
+
   // Staged reveal: the opening logo flythrough owns p 0 -> ~0.06, then the
   // headline, subhead, and CTA each blur-fade in over their own scroll band.
   // Past SCRUB_END the ship has finished its run, so everything in front of it
@@ -718,7 +747,7 @@ export function Hero() {
           <video
             className="absolute inset-0 h-full w-full object-cover"
             src={videoSrc("hero-desktop-480.mp4", heroReducedMotionVideo)}
-            poster={heroReducedMotionPoster}
+            poster={heroOpenPoster}
             autoPlay
             muted
             loop
