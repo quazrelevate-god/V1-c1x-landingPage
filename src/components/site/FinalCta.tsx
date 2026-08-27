@@ -2,7 +2,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { videoSrc } from "@/lib/media";
 import { useMotionEnabled } from "@/lib/scroll-motion";
 import { Parallax, Reveal, useInView } from "./primitives";
-import ctaPoster from "@/assets/hero-port.jpg";
 // Reuses the desktop hero footage at 480p (487 KB) rather than a separate loop
 // asset — this sits at opacity-35 behind gradients, so a low-res cut is plenty.
 import ctaVideo from "@/assets/hero-desktop-480.mp4";
@@ -11,13 +10,12 @@ export function FinalCta() {
   const { ref, inView } = useInView<HTMLElement>(0.1);
   const isMobile = useIsMobile();
   const motionEnabled = useMotionEnabled();
-  // The 2.5 MB loop only earns its bytes on a screen that can see it move: it
-  // sits at opacity-35 behind two gradients and a lime glow, so on a phone —
-  // where the data cost is highest — the poster still is all but indistinguish-
-  // able. Load the clip only on desktop, with motion on, once scrolled to it;
-  // everyone else gets the still. Before this the video autoplayed and pulled
-  // its full weight on first paint, on every device, for a section at the very
-  // bottom of the page.
+  // The loop only earns its bytes on a screen that can see it move: it sits at
+  // opacity-35 behind two gradients and a lime glow. Load it only on desktop,
+  // with motion on, once scrolled to it; everyone else gets the section's own
+  // background and corridor glow, with no image standing in for the footage.
+  // Before this the video autoplayed and pulled its full weight on first paint,
+  // on every device, for a section at the very bottom of the page.
   const showVideo = inView && !isMobile && motionEnabled;
 
   return (
@@ -36,19 +34,10 @@ export function FinalCta() {
               muted
               playsInline
               preload="none"
-              poster={ctaPoster}
             >
               <source src={videoSrc("hero-desktop-480.mp4", ctaVideo)} type="video/mp4" />
             </video>
-          ) : (
-            <img
-              src={ctaPoster}
-              alt=""
-              aria-hidden
-              loading="lazy"
-              className="h-full w-full scale-125 object-cover opacity-35"
-            />
-          )}
+          ) : null}
         </Parallax>
         <div className="absolute inset-0 bg-background/75" />
         <div className="absolute inset-0 bg-gradient-to-b from-background via-background/60 to-background" />
