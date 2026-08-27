@@ -9,10 +9,11 @@ import heroReducedMotionPoster from "@/assets/hero-port.jpg";
 // clip finishes loading.
 import heroOpenPoster from "@/assets/hero-open-poster.jpg";
 import heroDesktopVideo from "@/assets/hero-desktop.mp4";
-// Phones scrub a purpose-built 4:5 portrait cut (720x900, 1.6 MB) instead of the
-// 1920x1080 master (7.4 MB). The crop and its pan are baked into the encode, and
-// keyframes sit every 5 frames so a seek never has to decode far — the two things
-// that made scrubbing the master on a phone stutter.
+// Phones scrub a purpose-built 4:5 portrait cut (720x900, 1.5 MB) instead of the
+// 1920x1080 master (7.4 MB). The crop is baked into the encode and keyframes sit
+// every 5 frames so a seek never has to decode far — the two things that made
+// scrubbing the master on a phone stutter. It is also trimmed to open on the
+// ship, which the aperture depends on; see the note above PORTRAIT_BAND.
 import heroPortraitVideo from "@/assets/hero-mobile.mp4";
 import heroPortraitPoster from "@/assets/hero-mobile-poster.jpg";
 import { APERTURE_END, PHONE_MQ } from "@/lib/hero-timing";
@@ -77,12 +78,18 @@ const DIM_LEN = 0.2;
  * comfortable swipe.
  *
  * So the reveal is drawn rather than scrubbed. It gets APERTURE_END of the
- * section to itself — ~440px, a full unhurried swipe — and the clip starts
- * after its own logo moment, at VIDEO_START, so the ship is what shows through
- * the growing window.
+ * section to itself — ~440px, a full unhurried swipe — and the ship is what
+ * shows through the growing window.
+ *
+ * The portrait cut is trimmed to begin after the fly-through rather than being
+ * seeked past it. Seeking past it left the clip's first frame — and so its
+ * poster — on the logo, and that poster is exactly what fills the aperture's
+ * window for as long as the clip is still arriving. The opening therefore showed
+ * the vector mark growing with a second, softer copy of the same mark visible
+ * through it, which is the last thing this reveal wants. Cutting the frames away
+ * makes the poster the ship, so the window shows the right thing from the first
+ * paint, before a single byte of video has landed.
  */
-/** Where the clip's fly-through has finished and the ship run begins. */
-const VIDEO_START = 0.55;
 
 function HeroCta() {
   return (
@@ -154,7 +161,7 @@ const CALLOUTS = [
 // `at` is scroll, but what each label has to agree with is the wireframe
 // conversion in the footage — so these are the landscape timings carried across
 // rather than reinvented. Those fire at video t≈2.97 / 4.35 / 5.73; run those
-// back through the phone's mapping (the clip starts at VIDEO_START and spans
+// back through the phone's mapping (the clip is trimmed to the ship and spans
 // APERTURE_END..SCRUB_END) and they land here. Retiming the scroll without
 // moving these would have drifted every label off the reveal it names.
 //
@@ -170,9 +177,9 @@ const CALLOUTS = [
 // Matched's right against it, because they were placed against a scan that
 // mistook bright water for hull.
 const PORTRAIT_CALLOUTS = [
-  { label: "Verified", at: 0.43, x: "32.5%", y: "22%" },
-  { label: "Matched", at: 0.53, x: "41.5%", y: "33%" },
-  { label: "Secured", at: 0.62, x: "52.5%", y: "44%" },
+  { label: "Verified", at: 0.4, x: "32.5%", y: "22%" },
+  { label: "Matched", at: 0.5, x: "41.5%", y: "33%" },
+  { label: "Secured", at: 0.61, x: "52.5%", y: "44%" },
 ];
 
 function WireCallout({
@@ -432,12 +439,10 @@ export function Hero() {
       current.current += (target.current - current.current) * 0.12;
       const end = dur - 0.05;
       // On a phone the aperture owns the opening, so the clip holds on its first
-      // post-fly-through frame until the window has cleared, then runs the rest
-      // of its length across the scroll that remains. Landscape still maps the
-      // whole timeline to the whole hero.
+      // frame until the window has cleared, then runs its whole length across the
+      // scroll that remains. Landscape maps the whole timeline to the whole hero.
       const t = phone
-        ? VIDEO_START +
-          clamp((current.current - APERTURE_END) / (SCRUB_END - APERTURE_END)) * (end - VIDEO_START)
+        ? clamp((current.current - APERTURE_END) / (SCRUB_END - APERTURE_END)) * end
         : clamp(current.current / SCRUB_END) * end;
       if (Math.abs(v.currentTime - t) > 1 / 60) {
         try {
