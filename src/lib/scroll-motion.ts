@@ -73,6 +73,12 @@ function recomputeMotion() {
 }
 
 function assessFrame(dt: number) {
+  // Frame timing means nothing while the page is off screen: browsers throttle
+  // rAF to about once a second in a background tab, and stop it altogether in a
+  // hidden one. Judging a device on those frames condemns a perfectly capable
+  // machine — anyone who opens the site in a background tab, or whose browser
+  // restores it on startup — to the static page for the whole session.
+  if (document.hidden) return;
   // Only contiguous frames say anything about sustained frame rate; a long gap
   // is a pause between scrolls, not a dropped frame.
   if (dt <= 0 || dt > 100) return;
@@ -115,14 +121,38 @@ function onScroll() {
   scheduleTick();
 }
 
+/** Runs `fn` the next time the page is actually on screen. */
+function whenVisible(fn: () => void) {
+  const onChange = () => {
+    if (document.hidden) return;
+    document.removeEventListener("visibilitychange", onChange);
+    fn();
+  };
+  document.addEventListener("visibilitychange", onChange);
+}
+
 function probeIdleFrameRate() {
   // A quick idle sample catches a low-refresh or throttled environment before a
   // single effect has animated, so a slow device can start static rather than
   // proving it's slow the hard way, mid-scroll.
+  //
+  // Only ever sampled while the page is on screen, and abandoned if it goes away
+  // mid-sample: a tab opened in the background paints at about 1fps, which would
+  // otherwise read as a device far too slow to animate and latch the whole
+  // session static before the visitor had even looked at it.
+  if (document.hidden) {
+    whenVisible(probeIdleFrameRate);
+    return;
+  }
   let frames = 0;
   let acc = 0;
   let last = 0;
   const step = (ts: number) => {
+    if (document.hidden) {
+      // Throw the partial sample away and start over once we're back on screen.
+      whenVisible(probeIdleFrameRate);
+      return;
+    }
     if (last) {
       acc += ts - last;
       frames += 1;
