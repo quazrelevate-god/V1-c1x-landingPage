@@ -18,7 +18,27 @@ import heroPortraitVideo from "@/assets/hero-mobile.mp4";
 import heroPortraitPoster from "@/assets/hero-mobile-poster.jpg";
 import { APERTURE_END, PHONE_MQ } from "@/lib/hero-timing";
 import { HeroAperture } from "./HeroAperture";
+import { HeroLoader } from "./HeroLoader";
 import { REDUCED_MOTION_MQ } from "./primitives";
+
+/*
+ * How long the loading gate will wait before opening regardless.
+ *
+ * A gate that only opens on success is worse than the problem it solves: a
+ * failed decode, a dead connection or a browser that simply declines to preload
+ * would leave the visitor on a black screen with a bar that never fills. This is
+ * the ceiling, not the expectation — a cached load clears it in milliseconds.
+ */
+const GATE_TIMEOUT_MS = 8000;
+
+/*
+ * Wait this long before showing the gate at all.
+ *
+ * Repeat visits serve the clip from cache and are ready almost immediately;
+ * without this the loader would appear and vanish in the same breath, which
+ * reads as a flicker rather than as loading.
+ */
+const GATE_GRACE_MS = 220;
 
 /*
  * Optional CDN origin for the landscape master, set per-environment as
@@ -319,6 +339,11 @@ export function Hero() {
   // down whole; see the effect below.
   const [blobSrc, setBlobSrc] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  /** Gate state: the footage is there (or we gave up waiting for it). */
+  const [gateOpen, setGateOpen] = useState(false);
+  /** Only true once the grace period has passed without the clip being ready. */
+  const [gateVisible, setGateVisible] = useState(false);
+  const [bufferedPct, setBufferedPct] = useState(0);
 
   useEffect(() => {
     // Only reduced-motion users get the static hero now. Phones scrub too — the
@@ -340,6 +365,103 @@ export function Hero() {
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
   }, []);
+
+  /*
+   * Hold the hero closed until its footage has arrived.
+   *
+   * Everything in this section is driven by scroll, so without this the reveal
+   * opens onto an empty window and the callouts start naming a ship that has not
+   * loaded — which is what made the opening look broken rather than slow. Phones
+   * only: landscape streams the master over byte ranges and is watchable long
+   * before it is complete, so gating it would be a delay with nothing to show
+   * for it.
+   */
+  useEffect(() => {
+    if (!ready) return;
+    if (!phone || reducedMotion) {
+      setGateOpen(true);
+      return;
+    }
+
+    const v = videoRef.current;
+    if (!v) return;
+
+    let done = false;
+    const open = () => {
+      if (done) return;
+      done = true;
+      setGateOpen(true);
+    };
+
+    const progress = () => {
+      const d = v.duration;
+      if (!d || Number.isNaN(d)) return;
+      const end = v.buffered.length ? v.buffered.end(v.buffered.length - 1) : 0;
+      setBufferedPct(Math.min(end / d, 1));
+      // readyState is the honest signal — buffered can reach the end while the
+      // decoder still has work to do.
+      if (v.readyState >= 4) open();
+    };
+
+    progress();
+    v.addEventListener("canplaythrough", open);
+    v.addEventListener("progress", progress);
+    v.addEventListener("loadeddata", progress);
+    // Never trap the visitor: a decode failure or a stalled connection opens the
+    // gate on the same terms as success.
+    v.addEventListener("error", open);
+    const poll = window.setInterval(progress, 250);
+    const bail = window.setTimeout(open, GATE_TIMEOUT_MS);
+    // `done` guards this as well as the opener: a clip that lands just after the
+    // grace period would otherwise raise the gate and drop it in the same beat.
+    const grace = window.setTimeout(() => {
+      if (!done) setGateVisible(true);
+    }, GATE_GRACE_MS);
+
+    return () => {
+      v.removeEventListener("canplaythrough", open);
+      v.removeEventListener("progress", progress);
+      v.removeEventListener("loadeddata", progress);
+      v.removeEventListener("error", open);
+      clearInterval(poll);
+      clearTimeout(bail);
+      clearTimeout(grace);
+    };
+    // heroSrc deliberately absent: it is declared below this effect, and `phone`
+    // already covers every case in which it changes.
+  }, [ready, phone, reducedMotion]);
+
+  // Drop the gate from the tree once it has faded, rather than leaving a
+  // full-screen fixed layer parked over the page for the rest of the session.
+  useEffect(() => {
+    if (!gateVisible || !gateOpen) return;
+    const id = window.setTimeout(() => setGateVisible(false), 600);
+    return () => clearTimeout(id);
+  }, [gateVisible, gateOpen]);
+
+  /*
+   * Freeze the page behind the gate.
+   *
+   * Scrolling while it is up would advance the reveal invisibly, so the visitor
+   * would release the gate already part-way through the intro they were waiting
+   * to see. Position-fixed rather than overflow-hidden because iOS Safari
+   * ignores the latter on the body.
+   */
+  useEffect(() => {
+    const locked = gateVisible && !gateOpen;
+    if (!locked) return;
+    const { style } = document.body;
+    const prev = { position: style.position, top: style.top, width: style.width };
+    window.scrollTo(0, 0);
+    style.position = "fixed";
+    style.top = "0";
+    style.width = "100%";
+    return () => {
+      style.position = prev.position;
+      style.top = prev.top;
+      style.width = prev.width;
+    };
+  }, [gateVisible, gateOpen]);
 
   // One source of truth for which cut is in play: the <video>, the range probe,
   // and the poster all read from here, so they can't drift onto different clips.
@@ -530,17 +652,20 @@ export function Hero() {
   }
 
   return (
-    // svh so the pinned pane doesn't resize when mobile browser chrome hides,
-    // which would otherwise re-run the scroll maths mid-scrub and jump the video.
-    // The extra 40svh past the scrub is the hand-over: copy dissolves, footage dims.
-    <section ref={sectionRef} id="top" className="relative h-[300svh]">
-      <div
-        className="sticky top-0 h-[100svh] min-h-[560px] overflow-hidden bg-background"
-        // Published as a variable so the band and the copy that tucks under it
-        // are driven by one number and can't drift apart.
-        style={{ "--hero-band": PORTRAIT_BAND } as CSSProperties}
-      >
-        {/*
+    <>
+      {gateVisible ? <HeroLoader progress={bufferedPct} leaving={gateOpen} /> : null}
+      {/* svh so the pinned pane doesn't resize when mobile browser chrome hides,
+          which would otherwise re-run the scroll maths mid-scrub and jump the
+          video. The extra 40svh past the scrub is the hand-over: copy dissolves,
+          footage dims. */}
+      <section ref={sectionRef} id="top" className="relative h-[300svh]">
+        <div
+          className="sticky top-0 h-[100svh] min-h-[560px] overflow-hidden bg-background"
+          // Published as a variable so the band and the copy that tucks under it
+          // are driven by one number and can't drift apart.
+          style={{ "--hero-band": PORTRAIT_BAND } as CSSProperties}
+        >
+          {/*
           Phones get a fixed portrait band sized to the 4:5 cut's own aspect, so
           the footage is shown whole rather than cropped a second time by CSS.
           Nothing about this box animates: the previous version drove height, top
@@ -548,70 +673,70 @@ export function Hero() {
           repaint on every frame of the scrub while the decoder was already busy
           seeking. From sm up it's full bleed as before.
         */}
-        <div
-          ref={bandRef}
-          className="absolute inset-x-0 top-16 sm:inset-0 sm:top-0 sm:h-full"
-          // Once the ship has finished its run the footage sinks to a backdrop
-          // for the Problem section rather than sliding away as a sheet. Only
-          // filter and opacity animate here — both composite without layout.
-          style={{
-            filter: `brightness(${1 - dim * 0.74}) saturate(${1 - dim * 0.5})`,
-            opacity: 1 - dim * 0.55,
-            ...(phone ? { height: "var(--hero-band)" } : {}),
-          }}
-        >
-          <video
-            ref={videoRef}
-            className="absolute inset-0 h-full w-full object-cover object-center"
-            // When the 54svh ceiling bites on a short viewport the band is
-            // shallower than the clip, so object-cover has to drop something.
-            // Biasing the crop high keeps the bow — which sits ~5% down the
-            // frame — and spends the loss on the empty water under the stern.
-            style={phone ? { objectPosition: "50% 15%" } : {}}
-            poster={phone ? heroPortraitPoster : heroOpenPoster}
-            // Held back until hydration so the poster paints first and the clip
-            // downloads behind it rather than blocking the view.
-            {...(ready ? { src: blobSrc ?? heroSrc } : {})}
-            muted
-            playsInline
-            preload={ready ? "auto" : "none"}
-          />
-          {/* Dissolves the band into the page on phones; no seam from sm up. */}
           <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 sm:hidden"
+            ref={bandRef}
+            className="absolute inset-x-0 top-16 sm:inset-0 sm:top-0 sm:h-full"
+            // Once the ship has finished its run the footage sinks to a backdrop
+            // for the Problem section rather than sliding away as a sheet. Only
+            // filter and opacity animate here — both composite without layout.
             style={{
-              background:
-                "linear-gradient(to top, var(--background) 2%, color-mix(in oklab, var(--background) 55%, transparent) 45%, transparent 100%)",
+              filter: `brightness(${1 - dim * 0.74}) saturate(${1 - dim * 0.5})`,
+              opacity: 1 - dim * 0.55,
+              ...(phone ? { height: "var(--hero-band)" } : {}),
             }}
-          />
+          >
+            <video
+              ref={videoRef}
+              className="absolute inset-0 h-full w-full object-cover object-center"
+              // When the 54svh ceiling bites on a short viewport the band is
+              // shallower than the clip, so object-cover has to drop something.
+              // Biasing the crop high keeps the bow — which sits ~5% down the
+              // frame — and spends the loss on the empty water under the stern.
+              style={phone ? { objectPosition: "50% 15%" } : {}}
+              poster={phone ? heroPortraitPoster : heroOpenPoster}
+              // Held back until hydration so the poster paints first and the clip
+              // downloads behind it rather than blocking the view.
+              {...(ready ? { src: blobSrc ?? heroSrc } : {})}
+              muted
+              playsInline
+              preload={ready ? "auto" : "none"}
+            />
+            {/* Dissolves the band into the page on phones; no seam from sm up. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 sm:hidden"
+              style={{
+                background:
+                  "linear-gradient(to top, var(--background) 2%, color-mix(in oklab, var(--background) 55%, transparent) 45%, transparent 100%)",
+              }}
+            />
 
-          {/*
+            {/*
             Anchored to the deck, inside the band so they track the footage. The
             two crops frame the ship differently, so each gets its own anchors —
             and on the portrait cut the labels run left into open water.
           */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{ opacity: hold }}
-          >
-            {phone
-              ? null
-              : CALLOUTS.map((c) => (
-                  <WireCallout
-                    key={c.label}
-                    label={c.label}
-                    x={c.x}
-                    y={c.y}
-                    progress={clamp((p - c.at) / 0.09)}
-                  />
-                ))}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{ opacity: hold }}
+            >
+              {phone
+                ? null
+                : CALLOUTS.map((c) => (
+                    <WireCallout
+                      key={c.label}
+                      label={c.label}
+                      x={c.x}
+                      y={c.y}
+                      progress={clamp((p - c.at) / 0.09)}
+                    />
+                  ))}
+            </div>
           </div>
-        </div>
-        <Overlay />
+          <Overlay />
 
-        {/*
+          {/*
           The cover spans the pane; the mark centres on the band.
 
           Those are two different boxes and it matters. The mark is a window onto
@@ -629,13 +754,13 @@ export function Hero() {
           Phones only for now; landscape keeps the clip's own fly-through, which
           has the width to read at its own pace.
         */}
-        {phone && ready ? (
-          <div className="pointer-events-none absolute inset-0 z-30">
-            <HeroAperture progress={apertureProgress} focusRef={bandRef} />
-          </div>
-        ) : null}
+          {phone && ready ? (
+            <div className="pointer-events-none absolute inset-0 z-30">
+              <HeroAperture progress={apertureProgress} focusRef={bandRef} />
+            </div>
+          ) : null}
 
-        {/*
+          {/*
           The phone's callouts ride above Overlay, boxed to the band so their
           percentages still land on the footage.
 
@@ -646,46 +771,47 @@ export function Hero() {
           top of it. Landscape is unaffected: its labels sit right of centre
           where that gradient has already fallen away to nothing.
         */}
-        {phone ? (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-16 z-30"
-            style={{ height: PORTRAIT_BAND, opacity: hold }}
-          >
-            {PORTRAIT_CALLOUTS.map((c) => (
-              <WireCallout
-                key={c.label}
-                label={c.label}
-                x={c.x}
-                y={c.y}
-                side="left"
-                progress={clamp((p - c.at) / 0.09)}
-              />
-            ))}
+          {phone ? (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-16 z-30"
+              style={{ height: PORTRAIT_BAND, opacity: hold }}
+            >
+              {PORTRAIT_CALLOUTS.map((c) => (
+                <WireCallout
+                  key={c.label}
+                  label={c.label}
+                  x={c.x}
+                  y={c.y}
+                  side="left"
+                  progress={clamp((p - c.at) / 0.09)}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          <div className="relative z-40 h-full">
+            <HeroCopy
+              headlineReveal={headlineReveal}
+              subheadReveal={subheadReveal}
+              ctaReveal={ctaReveal}
+            />
           </div>
-        ) : null}
 
-        <div className="relative z-40 h-full">
-          <HeroCopy
-            headlineReveal={headlineReveal}
-            subheadReveal={subheadReveal}
-            ctaReveal={ctaReveal}
-          />
+          {/* scroll cue — only at the very top */}
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-8 z-40 flex flex-col items-center gap-2 transition-opacity duration-300"
+            style={{ opacity: 1 - clamp(p / 0.04) }}
+          >
+            <span className="font-display text-[0.68rem] tracking-[0.02em] text-muted-foreground uppercase">
+              Scroll
+            </span>
+            <span className="relative h-10 w-px bg-border">
+              <span className="corridor-particle absolute inset-x-0 top-0 h-3 bg-accent" />
+            </span>
+          </div>
         </div>
-
-        {/* scroll cue — only at the very top */}
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-8 z-40 flex flex-col items-center gap-2 transition-opacity duration-300"
-          style={{ opacity: 1 - clamp(p / 0.04) }}
-        >
-          <span className="font-display text-[0.68rem] tracking-[0.02em] text-muted-foreground uppercase">
-            Scroll
-          </span>
-          <span className="relative h-10 w-px bg-border">
-            <span className="corridor-particle absolute inset-x-0 top-0 h-3 bg-accent" />
-          </span>
-        </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
 }

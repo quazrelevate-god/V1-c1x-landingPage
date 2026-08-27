@@ -474,3 +474,34 @@
   background: radial-gradient(circle, color-mix(in oklab, var(--accent) 7%, transparent) 0%, transparent 68%);
   animation: hero-aura-drift-c 58s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
+
+/*
+ * The mark breathing while the hero's footage loads. Scale as well as opacity so
+ * it reads as alive on an otherwise empty screen; both are compositor-only, so
+ * it costs nothing while the decoder is busy. Respects reduced motion by holding
+ * still rather than stopping dead at whatever frame it was on.
+ */
+@utility c1x-loader-pulse {
+  animation: c1x-loader-breathe 1.6s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes c1x-loader-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c1x-loader-pulse {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
