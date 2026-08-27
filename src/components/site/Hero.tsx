@@ -3,7 +3,7 @@ import { reportFrameDelta, useMotionEnabled } from "@/lib/scroll-motion";
 // Shown only to visitors who have asked their OS to reduce motion: a plain
 // autoplay loop with no scrubbing, so it never seeks and never needs the scrub
 // master. Everyone else downloads neither of these two files.
-import heroReducedMotionVideo from "@/assets/hero-loop.mp4";
+import heroReducedMotionVideo from "@/assets/hero-desktop-480.mp4";
 import heroReducedMotionPoster from "@/assets/hero-port.jpg";
 // hero-desktop.mp4's own opening frame. The scrub sits at t=0 until you move, so
 // the poster has to be that same frame or the hero visibly jumps once the 7.4 MB

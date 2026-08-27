@@ -2,7 +2,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useMotionEnabled } from "@/lib/scroll-motion";
 import { Parallax, Reveal, useInView } from "./primitives";
 import ctaPoster from "@/assets/hero-port.jpg";
-import ctaVideo from "@/assets/hero-loop.mp4";
+// Reuses the desktop hero footage at 480p (487 KB) rather than a separate loop
+// asset — this sits at opacity-35 behind gradients, so a low-res cut is plenty.
+import ctaVideo from "@/assets/hero-desktop-480.mp4";
 
 export function FinalCta() {
   const { ref, inView } = useInView<HTMLElement>(0.1);
