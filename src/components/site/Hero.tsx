@@ -9,15 +9,13 @@ import heroReducedMotionPoster from "@/assets/hero-port.jpg";
 // clip finishes loading.
 import heroOpenPoster from "@/assets/hero-open-poster.jpg";
 import heroDesktopVideo from "@/assets/hero-desktop.mp4";
-// Phones scrub a purpose-built 4:5 portrait cut (720x900, 1.5 MB) instead of the
-// 1920x1080 master (7.4 MB). The crop is baked into the encode and keyframes sit
-// every 5 frames so a seek never has to decode far — the two things that made
-// scrubbing the master on a phone stutter. It is also trimmed to open on the
-// ship, which the aperture depends on; see the note above PORTRAIT_BAND.
-import heroPortraitVideo from "@/assets/hero-mobile.mp4";
-import heroPortraitPoster from "@/assets/hero-mobile-poster.jpg";
+// Phones get this still and draw the wireframe over it, rather than scrubbing a
+// clip. See HeroDeckGrid for why: the origin will not serve byte ranges, so a
+// video here had to be downloaded whole before the first seek would land.
+import heroPortraitStill from "@/assets/hero-mobile-still.jpg";
 import { APERTURE_END, PHONE_MQ } from "@/lib/hero-timing";
 import { HeroAperture } from "./HeroAperture";
+import { HeroDeckGrid } from "./HeroDeckGrid";
 import { HeroLoader } from "./HeroLoader";
 import { REDUCED_MOTION_MQ } from "./primitives";
 
@@ -384,7 +382,8 @@ export function Hero() {
    */
   useEffect(() => {
     if (!ready) return;
-    if (!phone || reducedMotion) {
+    // Phones show a still now — nothing to buffer, so nothing to gate.
+    if (phone || reducedMotion) {
       setGateOpen(true);
       return;
     }
@@ -491,11 +490,7 @@ export function Hero() {
 
   // One source of truth for which cut is in play: the <video>, the range probe,
   // and the poster all read from here, so they can't drift onto different clips.
-  const heroSrc = phone
-    ? heroPortraitVideo
-    : MEDIA_BASE
-      ? `${MEDIA_BASE}/hero-desktop.mp4`
-      : heroDesktopVideo;
+  const heroSrc = MEDIA_BASE ? `${MEDIA_BASE}/hero-desktop.mp4` : heroDesktopVideo;
 
   // scroll -> progress
   useEffect(() => {
@@ -576,7 +571,7 @@ export function Hero() {
   // eased seek loop — the video timeline maps directly to scroll across the
   // whole hero, so the clip scrubs from its opening frame through to the end.
   useEffect(() => {
-    if (reducedMotion) return;
+    if (reducedMotion || phone) return;
     let raf = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
@@ -589,9 +584,7 @@ export function Hero() {
       // On a phone the aperture owns the opening, so the clip holds on its first
       // frame until the window has cleared, then runs its whole length across the
       // scroll that remains. Landscape maps the whole timeline to the whole hero.
-      const t = phone
-        ? clamp((current.current - APERTURE_END) / (SCRUB_END - APERTURE_END)) * end
-        : clamp(current.current / SCRUB_END) * end;
+      const t = clamp(current.current / SCRUB_END) * end;
       if (Math.abs(v.currentTime - t) > 1 / 60) {
         try {
           v.currentTime = t;
@@ -631,6 +624,12 @@ export function Hero() {
   const dim = clamp((p - DIM_AT) / DIM_LEN);
   // 0 -> 1 across the aperture's own band; at 1 the cover unmounts itself.
   const apertureProgress = p / APERTURE_END;
+  /*
+   * The wireframe builds across the same stretch the callouts occupy, so each
+   * label still lands on a section of stack that has just been drawn — the
+   * relationship the footage used to provide.
+   */
+  const gridProgress = clamp((p - APERTURE_END) / (SCRUB_END - APERTURE_END));
 
   if (ready && reducedMotion) {
     return (
@@ -711,22 +710,48 @@ export function Hero() {
               ...(phone ? { height: "var(--hero-band)" } : {}),
             }}
           >
-            <video
-              ref={videoRef}
-              className="absolute inset-0 h-full w-full object-cover object-center"
-              // When the 54svh ceiling bites on a short viewport the band is
-              // shallower than the clip, so object-cover has to drop something.
-              // Biasing the crop high keeps the bow — which sits ~5% down the
-              // frame — and spends the loss on the empty water under the stern.
-              style={phone ? { objectPosition: "50% 15%" } : {}}
-              poster={phone ? heroPortraitPoster : heroOpenPoster}
-              // Held back until hydration so the poster paints first and the clip
-              // downloads behind it rather than blocking the view.
-              {...(ready ? { src: blobSrc ?? heroSrc } : {})}
-              muted
-              playsInline
-              preload={ready ? "auto" : "none"}
-            />
+            {phone ? (
+              /*
+                Phones get a still and a drawn grid instead of the clip.
+                128 KB against 1.4 MB, and — the part that actually mattered —
+                nothing to seek. The origin answers a Range request with the whole
+                file and a 200, so scrubbing video here meant downloading all of
+                it before the first seek would land: one stuck frame for however
+                long that took, and a second visit needed before it worked at all.
+                An image cannot fail that way, and the wireframe is now vector, so
+                it is sharp on a 3x screen rather than a 720px clip upscaled.
+              */
+              <img
+                src={heroPortraitStill}
+                alt=""
+                aria-hidden
+                className="absolute inset-0 h-full w-full object-cover"
+                // Top-anchored: when the height ceiling bites the band is
+                // shallower than the still and object-cover has to drop
+                // something, so it spends the loss on the empty water under the
+                // stern and keeps the bow. The grid's SVG uses the matching
+                // "xMidYMin slice" so the two crop as one.
+                style={{ objectPosition: "50% 0%" }}
+                decoding="async"
+                fetchPriority="high"
+              />
+            ) : (
+              <video
+                ref={videoRef}
+                className="absolute inset-0 h-full w-full object-cover object-center"
+                poster={heroOpenPoster}
+                // Held back until hydration so the poster paints first and the
+                // clip downloads behind it rather than blocking the view.
+                {...(ready ? { src: blobSrc ?? heroSrc } : {})}
+                muted
+                playsInline
+                preload={ready ? "auto" : "none"}
+              />
+            )}
+
+            {/* The wireframe the clip used to carry, built from the same scroll
+                progress the callouts read, so label and linework stay in step. */}
+            {phone ? <HeroDeckGrid progress={gridProgress} /> : null}
             {/* Dissolves the band into the page on phones; no seam from sm up. */}
             <div
               aria-hidden
