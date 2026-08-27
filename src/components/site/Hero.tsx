@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { reportFrameDelta, useMotionEnabled } from "@/lib/scroll-motion";
+import { videoSrc } from "@/lib/media";
 // Shown only to visitors who have asked their OS to reduce motion: a plain
 // autoplay loop with no scrubbing, so it never seeks and never needs the scrub
 // master. Everyone else downloads neither of these two files.
@@ -45,22 +46,6 @@ const GATE_TIMEOUT_MS = 20000;
  * reads as a flicker rather than as loading.
  */
 const GATE_GRACE_MS = 220;
-
-/*
- * Optional CDN origin for the landscape master, set per-environment as
- * VITE_MEDIA_BASE (e.g. https://cdn.example.com). Unset — which is how local dev
- * and any fresh checkout run — everything falls back to the bundled asset, so
- * this is a one-variable switch with no code change to roll back.
- *
- * Only the 7.4 MB master is worth moving. Railway answers a Range request with
- * the whole file and a 200, so the browser can't seek it and the fallback below
- * has to pull all 7.4 MB before the scrub is smooth; R2 answers a real 206, so
- * the browser fetches just the bytes it needs. The portrait cut is a fifth of
- * the size and the posters are first-paint assets where a second DNS + TLS
- * handshake would cost more than it saves, so they stay bundled and keep Vite's
- * content-hashed immutable caching.
- */
-const MEDIA_BASE = import.meta.env["VITE_MEDIA_BASE"]?.replace(/\/+$/, "");
 
 /**
  * Height of the portrait band on phones.
@@ -493,11 +478,10 @@ export function Hero() {
 
   // One source of truth for which cut is in play: the <video>, the range probe,
   // and the poster all read from here, so they can't drift onto different clips.
+  // Each resolves to the CDN when VITE_MEDIA_BASE is set, else the bundled copy.
   const heroSrc = phone
-    ? heroPortraitVideo
-    : MEDIA_BASE
-      ? `${MEDIA_BASE}/hero-desktop.mp4`
-      : heroDesktopVideo;
+    ? videoSrc("hero-mobile.mp4", heroPortraitVideo)
+    : videoSrc("hero-desktop.mp4", heroDesktopVideo);
 
   // scroll -> progress
   useEffect(() => {
@@ -677,7 +661,7 @@ export function Hero() {
         <div className="relative h-[52svh] max-h-[520px] min-h-[280px] w-full shrink-0">
           <video
             className="absolute inset-0 h-full w-full object-cover"
-            src={heroReducedMotionVideo}
+            src={videoSrc("hero-desktop-480.mp4", heroReducedMotionVideo)}
             poster={heroReducedMotionPoster}
             autoPlay
             muted

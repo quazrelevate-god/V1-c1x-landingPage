@@ -1,4 +1,5 @@
 import { useIsMobile } from "@/hooks/use-mobile";
+import { videoSrc } from "@/lib/media";
 import { useMotionEnabled } from "@/lib/scroll-motion";
 import { Parallax, Reveal, useInView } from "./primitives";
 import ctaPoster from "@/assets/hero-port.jpg";
@@ -37,7 +38,7 @@ export function FinalCta() {
               preload="none"
               poster={ctaPoster}
             >
-              <source src={ctaVideo} type="video/mp4" />
+              <source src={videoSrc("hero-desktop-480.mp4", ctaVideo)} type="video/mp4" />
             </video>
           ) : (
             <img
