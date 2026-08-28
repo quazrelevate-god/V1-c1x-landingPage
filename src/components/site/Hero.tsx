@@ -686,27 +686,51 @@ export function Hero() {
     const v = videoRef.current;
     if (!v) return;
     let primed = false;
+    // A play() already in flight. Firing another on the next touch while the
+    // first is still settling aborts it, so each attempt waits its turn.
+    let pending = false;
     const gestures = ["pointerdown", "touchend", "click", "keydown"] as const;
+    /*
+     * Deliberately no readyState check.
+     *
+     * An earlier version of this bailed out unless the element already had
+     * metadata, on the reasoning that there is nothing to warm up before then.
+     * That deadlocks in the exact case this exists for: Low Power Mode also
+     * declines to honour `preload`, so nothing is fetched, readyState stays 0,
+     * every gesture bails, and `loadedmetadata` never fires because no load was
+     * ever started. play() is what breaks the cycle — at readyState 0 it kicks
+     * off the fetch and then plays, which is precisely what tapping the play
+     * button in that state does.
+     *
+     * `primed` is set on success only. Marking it up front burned the one
+     * gesture we had: a refusal detached the listeners and there was never a
+     * second attempt. Now a refusal leaves them armed, so each further touch is
+     * another chance and the visitor's own scrolling retries this for us.
+     */
     const prime = () => {
-      if (primed) return;
-      // Nothing to warm up yet; the metadata listener will call back.
-      if (v.readyState < 1) return;
-      primed = true;
-      detachGestures();
+      if (primed || pending) return;
+      pending = true;
+      const settle = (started: boolean) => {
+        pending = false;
+        // Refused. Stay armed — some data-saver and privacy modes decline video
+        // outright, in which case the band's still is the floor and the hero
+        // simply holds on the same picture the scrub opens on.
+        if (!started) return;
+        primed = true;
+        detachGestures();
+        v.pause();
+      };
+      let playing: Promise<void> | undefined;
       try {
-        const started = v.play();
-        if (started && typeof started.then === "function") {
-          started
-            .then(() => v.pause())
-            // Refused even with a gesture behind it — some data-saver and
-            // privacy modes decline video outright. The hero holds on its
-            // poster, which is the same picture the scrub opens on.
-            .catch(() => undefined);
-        } else {
-          v.pause();
-        }
+        playing = v.play();
       } catch {
-        /* as above: the poster is the floor, so this degrades to a still */
+        settle(false);
+        return;
+      }
+      if (playing && typeof playing.then === "function") {
+        playing.then(() => settle(true)).catch(() => settle(false));
+      } else {
+        settle(true);
       }
     };
     const detachGestures = () => {
