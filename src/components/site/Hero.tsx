@@ -1,10 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { useMotionEnabled } from "@/lib/scroll-motion";
 import { MEDIA_BASE, videoSrc } from "@/lib/media";
-// Shown only to visitors who have asked their OS to reduce motion: a plain
-// autoplay loop with no scrubbing, so it never seeks and never needs the scrub
-// master. Everyone else downloads neither of these two files.
-import heroReducedMotionVideo from "@/assets/hero-desktop-480.mp4";
 // hero-desktop.mp4's own opening frame. The scrub sits at t=0 until you move, so
 // the poster has to be that same frame or the hero visibly jumps once the 7.4 MB
 // clip finishes loading.
@@ -326,28 +321,23 @@ export function Hero() {
   // itself once the clip has caught up, so it isn't a rAF running forever.
   const seekKick = useRef<(() => void) | null>(null);
   const [p, setP] = useState(0);
-  // No scrub, no scroll animation — the visitor prefers reduced motion, or the
-  // device can't hold a smooth frame rate. Both are decided by the shared motion
-  // engine (which folds prefers-reduced-motion in), so the hero, the parallax
-  // and every other scroll effect switch together.
-  const motionEnabled = useMotionEnabled();
   /*
-   * Whether the hero renders its static one-screen layout instead of the 300svh
-   * scrub.
+   * There is one hero, and it runs everywhere.
    *
-   * This deliberately lags `motionEnabled`. The two layouts are different
-   * heights — 300svh against one screen — so swapping while the visitor is
-   * inside the hero deletes about two screens of document under them: the
-   * browser clamps the scroll position and they are teleported mid-gesture into
-   * whatever now occupies that offset. And mid-hero is exactly when a swap is
-   * most likely, because the video scrub is the loudest reporter into the motion
-   * budget. So the swap is only ever applied at the top of the page, where both
-   * layouts start in the same place and the change is invisible; if the device
-   * is judged slow while the visitor is further down, the animation stops (that
-   * part is immediate) and the layout follows the next time they are back at the
-   * top.
+   * This used to swap in a separate static layout whenever the shared motion
+   * engine reported reduced motion. That layout was written for desktop and
+   * never given a phone version, so a phone that tripped it got the 16:9
+   * landscape master autoplaying on a loop in a stacked layout — no aperture, no
+   * deck callouts, wrong crop. Worse, it arrived *after* first paint, so the
+   * reveal would start and then be replaced mid-animation.
+   *
+   * The fix is not a better second hero, it is not having one. Everything in
+   * this section except the moving picture is SVG and DOM — the aperture, the
+   * callouts, the copy — and none of it needs a decoder. So the poster is the
+   * floor the hero always stands on and the footage is an enhancement painted
+   * over it (see the band's backgroundImage below). A device that cannot decode
+   * video gets the same hero, holding still, rather than a different one.
    */
-  const [staticHero, setStaticHero] = useState(false);
   const [phone, setPhone] = useState(false);
   // Set when the host can't serve byte ranges and we've had to pull the clip
   // down whole; see the effect below.
@@ -361,31 +351,11 @@ export function Hero() {
 
   useEffect(() => {
     // Held back until hydration so the poster paints before the clip is wired
-    // up. Whether this device animates at all is the motion engine's call now
-    // (reduced-motion preference or measured frame rate), read through
-    // `motionEnabled` above — phones still scrub, since the ship reveal is the
-    // whole point of the section and only exists in the scrub clip.
+    // up. Every device scrubs from here on: the ship reveal is the whole point
+    // of the section and only exists in the scrub clip, so withholding it left
+    // the visitor on a different page rather than a calmer one.
     setReady(true);
   }, []);
-
-  // Apply a motion change to the hero's layout only while the page is at the
-  // top; see the note on `staticHero`. At mount that is already true, so a
-  // reduced-motion visitor gets the static hero on their first paint.
-  useEffect(() => {
-    const wanted = !motionEnabled;
-    if (wanted === staticHero) return;
-    const applyIfSafe = () => {
-      if (window.scrollY > 4) return false;
-      setStaticHero(wanted);
-      return true;
-    };
-    if (applyIfSafe()) return;
-    const onScroll = () => {
-      if (applyIfSafe()) window.removeEventListener("scroll", onScroll);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [motionEnabled, staticHero]);
 
   // Phones scrub the portrait cut; from sm up it's the landscape master.
   useEffect(() => {
@@ -413,7 +383,7 @@ export function Hero() {
    */
   useEffect(() => {
     if (!ready) return;
-    if (!phone || staticHero || MEDIA_BASE) {
+    if (!phone || MEDIA_BASE) {
       setGateOpen(true);
       return;
     }
@@ -484,7 +454,7 @@ export function Hero() {
     };
     // heroSrc deliberately absent: it is declared below this effect, and `phone`
     // already covers every case in which it changes.
-  }, [ready, phone, staticHero]);
+  }, [ready, phone]);
 
   // Drop the gate from the tree once it has faded, rather than leaving a
   // full-screen fixed layer parked over the page for the rest of the session.
@@ -527,7 +497,6 @@ export function Hero() {
 
   // scroll -> progress
   useEffect(() => {
-    if (staticHero) return;
     let raf = 0;
     const compute = () => {
       raf = 0;
@@ -565,7 +534,7 @@ export function Hero() {
       window.removeEventListener("resize", onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [staticHero]);
+  }, []);
 
   /*
    * Scrubbing needs a seekable source. A static host that answers `Range` with
@@ -581,7 +550,7 @@ export function Hero() {
    * back door, undoing both the portrait crop and the weight saving.
    */
   useEffect(() => {
-    if (staticHero || !ready) return;
+    if (!ready) return;
     // A cross-origin CDN is neither probeable nor in need of probing. Both
     // fetches here would be blocked without a CORS policy on the bucket, so the
     // fallback could never build its blob anyway — and it has nothing to fix:
@@ -615,15 +584,11 @@ export function Hero() {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [staticHero, ready, heroSrc]);
+  }, [ready, heroSrc]);
 
   // eased seek loop — the video timeline maps directly to scroll across the
   // whole hero, so the clip scrubs from its opening frame through to the end.
   useEffect(() => {
-    // Gated on `motionEnabled` as well as the layout: when the device is judged
-    // slow the seeking must stop immediately, even though the layout swap waits
-    // until the visitor is back at the top of the page.
-    if (staticHero || !motionEnabled) return;
     let raf = 0;
     let last = 0;
     const tick = (ts: number) => {
@@ -689,7 +654,7 @@ export function Hero() {
       v?.removeEventListener("durationchange", kick);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [staticHero, motionEnabled, phone, blobSrc]);
+  }, [phone, blobSrc]);
 
   /*
    * Spin the decoder up so seeks actually paint on iOS.
@@ -698,32 +663,65 @@ export function Hero() {
    * `currentTime` moves, the picture doesn't — so the hero looked frozen on its
    * poster while the scroll scrubbed away underneath. This is every browser on
    * an iPhone, not just Safari: Chrome, Brave and Edge on iOS are all WebKit.
-   * Muted and playsInline means autoplay is allowed, so start it once and pause
-   * on the next tick; the scrub then owns `currentTime` from a warm decoder.
+   * Muted and playsInline normally means autoplay is allowed, so start it once
+   * and pause on the next tick; the scrub then owns `currentTime` from a warm
+   * decoder.
+   *
+   * "Normally" is why this also listens for a touch. In Low Power Mode iOS
+   * refuses unattended playback outright, so the metadata attempt rejects, the
+   * decoder stays cold and the hero never moves. But Low Power Mode only blocks
+   * playback that nothing asked for — a play() called inside a real input event
+   * is still honoured, which is exactly why the browser bothers to draw a play
+   * button in that state. Scrolling a phone requires touching it, so the first
+   * touch is a gesture we are guaranteed to get, and to get before the visitor
+   * can scroll anywhere. Retrying there costs nothing when autoplay was allowed
+   * (`primed` short-circuits) and is the whole fix when it wasn't.
+   *
+   * pointerdown/touchend/click/keydown rather than touchstart: those are the
+   * events the HTML spec counts as activation triggers, and WebKit follows it.
+   * Capture phase and passive, so nothing here can interfere with the scroll.
    */
   useEffect(() => {
-    if (staticHero || !ready) return;
+    if (!ready) return;
     const v = videoRef.current;
     if (!v) return;
     let primed = false;
+    const gestures = ["pointerdown", "touchend", "click", "keydown"] as const;
     const prime = () => {
       if (primed) return;
+      // Nothing to warm up yet; the metadata listener will call back.
+      if (v.readyState < 1) return;
       primed = true;
+      detachGestures();
       try {
         const started = v.play();
         if (started && typeof started.then === "function") {
-          started.then(() => v.pause()).catch(() => undefined);
+          started
+            .then(() => v.pause())
+            // Refused even with a gesture behind it — some data-saver and
+            // privacy modes decline video outright. The hero holds on its
+            // poster, which is the same picture the scrub opens on.
+            .catch(() => undefined);
         } else {
           v.pause();
         }
       } catch {
-        /* autoplay refused — the scrub still works wherever it wasn't needed */
+        /* as above: the poster is the floor, so this degrades to a still */
       }
     };
-    if (v.readyState >= 1) prime();
+    const detachGestures = () => {
+      gestures.forEach((type) => window.removeEventListener(type, prime, true));
+    };
+    prime();
     v.addEventListener("loadedmetadata", prime);
-    return () => v.removeEventListener("loadedmetadata", prime);
-  }, [staticHero, ready, blobSrc, heroSrc]);
+    gestures.forEach((type) =>
+      window.addEventListener(type, prime, { capture: true, passive: true }),
+    );
+    return () => {
+      v.removeEventListener("loadedmetadata", prime);
+      detachGestures();
+    };
+  }, [ready, blobSrc, heroSrc]);
 
   // Staged reveal: the opening logo flythrough owns p 0 -> ~0.06, then the
   // headline, subhead, and CTA each blur-fade in over their own scroll band.
@@ -753,51 +751,6 @@ export function Hero() {
   // 0 -> 1 across the aperture's own band; at 1 the cover unmounts itself.
   const apertureProgress = p / APERTURE_END;
 
-  if (ready && staticHero) {
-    return (
-      // Stacked rather than overlaid: the footage owns the top of the screen and
-      // dissolves into the page, then the copy sits on the page itself, left
-      // aligned. Reads far better on a phone than centred text over moving video.
-      // svh (not vh) so nothing resizes when mobile browser chrome hides.
-      <section id="top" className="relative flex min-h-svh flex-col overflow-hidden">
-        <div className="relative h-[52svh] max-h-[520px] min-h-[280px] w-full shrink-0">
-          <video
-            className="absolute inset-0 h-full w-full object-cover"
-            src={videoSrc("hero-desktop-480.mp4", heroReducedMotionVideo)}
-            poster={heroOpenPoster}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
-          />
-          {/* Fades the footage out into the page so there is no hard seam. */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(to top, var(--background) 1%, color-mix(in oklab, var(--background) 62%, transparent) 26%, color-mix(in oklab, var(--background) 18%, transparent) 58%, transparent 82%)",
-            }}
-          />
-        </div>
-
-        <div className="relative flex flex-1 flex-col justify-center px-5 pt-2 pb-14">
-          <h1 className="font-display text-[2rem] leading-[1.08] font-medium tracking-[-0.035em] text-foreground">
-            {headline}
-          </h1>
-          <p className="mt-5 max-w-md font-sans text-[0.95rem] leading-relaxed text-secondary-foreground">
-            {subhead}
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <HeroCta />
-            <HeroSecondaryCta />
-          </div>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <>
       {gateVisible ? <HeroLoader progress={bufferedPct} leaving={gateOpen} /> : null}
@@ -814,7 +767,15 @@ export function Hero() {
           className="sticky top-0 h-[100svh] min-h-[560px] overflow-hidden bg-background"
           // Published as a variable so the band and the copy that tucks under it
           // are driven by one number and can't drift apart.
-          style={{ "--hero-band": PORTRAIT_BAND } as CSSProperties}
+          style={
+            {
+              "--hero-band": PORTRAIT_BAND,
+              // The stills the band stands on, published here so the band can
+              // pick between them with a media query instead of React state.
+              "--hero-still": `url(${heroPortraitPoster})`,
+              "--hero-still-wide": `url(${heroOpenPoster})`,
+            } as CSSProperties
+          }
         >
           {/*
           Phones get a fixed portrait band sized to the 4:5 cut's own aspect, so
@@ -824,29 +785,61 @@ export function Hero() {
           repaint on every frame of the scrub while the decoder was already busy
           seeking. From sm up it's full bleed as before.
         */}
+          {/*
+            The poster is painted on the band, not handed to the <video>.
+
+            It is the floor this hero stands on: the aperture, the deck callouts
+            and the copy are all SVG and DOM and will run on anything, but the
+            moving picture needs a decoder, and a decoder is the one thing a
+            device can refuse us — Low Power Mode, data saver, a locked-down
+            browser. When it does, the callouts have to be naming *something*
+            rather than floating over a black rectangle. Backing the band means
+            the still is already there, in the right crop, before a byte of video
+            is requested, and the footage simply paints over it when it arrives.
+
+            As a background rather than the `poster` attribute because
+            background-size honours object-position reliably across WebKit
+            versions where poster framing has been inconsistent, and because a
+            poster is dropped the moment a frame decodes — leaving nothing
+            underneath if the decode later stalls. Same URL either way, so it is
+            still one download.
+          */}
+          {/*
+            Height, still and crop are all CSS here, never React state.
+
+            `phone` is false on the server and stays false until hydration, so
+            driving these off it meant the markup a phone first painted was the
+            desktop one: the 16:9 still, the landscape crop, and — because the
+            height only arrived with the inline style and `sm:h-full` needs 640px
+            — a band with no height at all. An empty rectangle, for as long as
+            hydration took. Expressing it as `h-[var(--hero-band)] sm:h-full`
+            says the same thing in a form the browser can honour on the first
+            paint, and closes the gap between `max-width: 639px` and `sm`'s
+            640px where a fractional viewport width matched neither rule.
+          */}
           <div
             ref={bandRef}
-            className="absolute inset-x-0 top-16 sm:inset-0 sm:top-0 sm:h-full"
+            className="absolute inset-x-0 top-16 h-[var(--hero-band)] bg-[image:var(--hero-still)] bg-position-[50%_15%] bg-cover sm:inset-0 sm:top-0 sm:h-full sm:bg-[image:var(--hero-still-wide)] sm:bg-position-[50%_50%]"
             // Once the ship has finished its run the footage sinks to a backdrop
             // for the Problem section rather than sliding away as a sheet. Only
             // filter and opacity animate here — both composite without layout.
             style={{
               filter: `brightness(${1 - dim * 0.74}) saturate(${1 - dim * 0.5})`,
               opacity: 1 - dim * 0.55,
-              ...(phone ? { height: "var(--hero-band)" } : {}),
             }}
           >
             <video
               ref={videoRef}
-              className="absolute inset-0 h-full w-full object-cover object-center"
-              // When the 54svh ceiling bites on a short viewport the band is
-              // shallower than the clip, so object-cover has to drop something.
-              // Biasing the crop high keeps the bow — which sits ~5% down the
-              // frame — and spends the loss on the empty water under the stern.
-              style={phone ? { objectPosition: "50% 15%" } : {}}
-              poster={phone ? heroPortraitPoster : heroOpenPoster}
-              // Held back until hydration so the poster paints first and the clip
-              // downloads behind it rather than blocking the view.
+              // object-position matches the band's background-position exactly,
+              // so the still and the footage sit on the same crop and nothing
+              // shifts when the decoder catches up. When the 58svh ceiling bites
+              // on a short viewport the band is shallower than the clip, so
+              // object-cover has to drop something: biasing high keeps the bow —
+              // which sits ~5% down the frame — and spends the loss on the empty
+              // water under the stern.
+              className="absolute inset-0 h-full w-full object-cover object-[50%_15%] sm:object-center"
+              // Held back until hydration so the band's still paints first and
+              // the clip downloads behind it rather than blocking the view.
               {...(ready ? { src: blobSrc ?? heroSrc } : {})}
               muted
               playsInline
