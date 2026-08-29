@@ -3,7 +3,13 @@
  */
 
 /**
- * When the countdown reaches zero.
+ * When the countdown reaches zero, and when the site goes live.
+ *
+ * One constant for both. It drives the launch page's counter, the moment the
+ * launch page hands over to the landing page, and the waitlist prompt on the
+ * landing page itself — because two "launch dates" in one codebase drift, and
+ * the launch page counting to one instant while the waitlist counts to another
+ * is exactly the kind of thing nobody notices until it is live.
  *
  * Written with an explicit +05:30 offset rather than a bare date so it means the
  * same instant wherever the visitor is: a bare "2026-08-29" would be parsed as
@@ -12,7 +18,7 @@
  *
  * Change this one line when the date is fixed.
  */
-export const LAUNCH_AT = Date.parse("2026-08-29T00:00:00+05:30");
+export const LAUNCH_AT = Date.parse("2026-09-04T18:00:00+05:30");
 
 /**
  * Written into the sheet's Message column so waitlist rows are distinguishable

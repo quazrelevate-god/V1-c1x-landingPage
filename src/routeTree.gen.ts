@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as BookADemoRouteImport } from './routes/book-a-demo'
+import { Route as LaunchingRouteImport } from './routes/launching'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +29,44 @@ const BookADemoRoute = BookADemoRouteImport.update({
   path: '/book-a-demo',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LaunchingRoute = LaunchingRouteImport.update({
+  id: '/launching',
+  path: '/launching',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/book-a-demo': typeof BookADemoRoute
+  '/launching': typeof LaunchingRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/book-a-demo': typeof BookADemoRoute
+  '/launching': typeof LaunchingRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/book-a-demo': typeof BookADemoRoute
+  '/launching': typeof LaunchingRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/book-a-demo'
+  fullPaths: '/' | '/about' | '/book-a-demo' | '/launching'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/book-a-demo'
-  id: '__root__' | '/' | '/about' | '/book-a-demo'
+  to: '/' | '/about' | '/book-a-demo' | '/launching'
+  id: '__root__' | '/' | '/about' | '/book-a-demo' | '/launching'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   BookADemoRoute: typeof BookADemoRoute
+  LaunchingRoute: typeof LaunchingRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,6 +92,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BookADemoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/launching': {
+      id: '/launching'
+      path: '/launching'
+      fullPath: '/launching'
+      preLoaderRoute: typeof LaunchingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,6 +106,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   BookADemoRoute: BookADemoRoute,
+  LaunchingRoute: LaunchingRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

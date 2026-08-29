@@ -104,12 +104,40 @@ function withCompression(request: Request, response: Response): Response {
   });
 }
 
+/*
+ * HTML is never cached.
+ *
+ * The homepage swaps from the launch page to the landing page the moment
+ * LAUNCH_AT passes, and a cached copy would keep serving the countdown after
+ * the site is live — the one failure that would actually matter here. Railway
+ * sends no cache-control of its own today, but without an explicit header a
+ * browser or proxy is free to apply heuristic caching, so this states it.
+ *
+ * Assets are untouched: they are content-hashed and stay immutable via
+ * _headers, which is where the real caching win is anyway.
+ */
+function withNoStoreHtml(response: Response): Response {
+  const type = response.headers.get("content-type") ?? "";
+  if (!type.includes("text/html")) return response;
+  if (response.headers.has("cache-control")) return response;
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", "no-store, must-revalidate");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return withCompression(request, await normalizeCatastrophicSsrResponse(response));
+      return withCompression(
+        request,
+        withNoStoreHtml(await normalizeCatastrophicSsrResponse(response)),
+      );
     } catch (error) {
       console.error(error);
       return withCompression(
