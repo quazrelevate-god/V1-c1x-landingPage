@@ -78,7 +78,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Corridor One X" },
-      { name: "description", content: "Next-generation commodity trade infrastructure for India & the Gulf." },
+      {
+        name: "description",
+        content: "Next-generation commodity trade infrastructure for global markets.",
+      },
       { name: "author", content: "Corridor One X" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

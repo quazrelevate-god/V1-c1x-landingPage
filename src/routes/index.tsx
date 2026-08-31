@@ -17,7 +17,7 @@ import { WaitlistPrompt } from "@/components/site/WaitlistPrompt";
 
 const title = "Corridor One X: Verified Commodity Trade Infrastructure";
 const description =
-  "Corridor One X connects verified producers, exporters, and importers directly. AI matching, autonomous settlement, and escrow-secured payment across the India-Gulf corridor.";
+  "Corridor One X connects verified producers, exporters, and importers directly. AI matching, autonomous settlement, and escrow-secured payment across global trade corridors.";
 
 export const Route = createFileRoute("/")({
   head: () => ({

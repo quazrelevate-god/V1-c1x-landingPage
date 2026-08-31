@@ -15,7 +15,7 @@ export function Footer() {
         <div className="max-w-sm">
           <img src={logo} alt="Corridor One X" className="h-6 w-auto" />
           <p className="mt-5 font-sans text-sm leading-relaxed text-muted-foreground">
-            Corridor One X. Next-generation trade infrastructure for India &amp; the Gulf.
+            Corridor One X. Next-generation trade infrastructure for global markets.
           </p>
         </div>
         <ul className="flex flex-wrap gap-x-8 gap-y-3">
