@@ -139,6 +139,36 @@ function frameOf(view: string) {
 export function WorldCorridorMap() {
   const [view, setView] = useState(FULL_VIEW);
   const { ref, revealed } = useRevealOnce<HTMLDivElement>(0.5);
+
+  /*
+   * Hold the compositor layers only while the reveal is running.
+   *
+   * `will-change: opacity` is what makes the wave smooth — it buys each path a
+   * cached texture instead of a per-frame vector repaint — but a promoted layer
+   * costs GPU memory for as long as it is declared, and there are 33 of them
+   * over a map this size. Once the last wave has landed nothing animates here
+   * again, so the hint is dropped and the memory goes back.
+   *
+   * The timeout covers the longest chain: the soon waves start at 360ms, the
+   * last is staggered 15 x 78ms behind that, and it fades for 420ms.
+   */
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!revealed) return;
+    const t = window.setTimeout(() => setSettled(true), 360 + 15 * 78 + 420 + 200);
+    return () => clearTimeout(t);
+  }, [revealed]);
+
+  /*
+   * Derived, not set from the effect above, and that ordering is the point.
+   *
+   * An effect runs after the render it belongs to, so promoting from there
+   * would apply `will-change` one frame AFTER the opacity target changed — the
+   * first wave has a 0ms delay, so it would start animating unpromoted, which is
+   * the exact frame that has to be cheap. Deriving it means the hint and the new
+   * opacity arrive in the same render, and the browser promotes as it starts.
+   */
+  const layerHint = revealed && !settled ? "opacity" : "auto";
   const frame = frameOf(view);
   // Null until the dot data is imported and turned into paths (see below).
   const [built, setBuilt] = useState<Built | null>(null);
@@ -209,7 +239,31 @@ export function WorldCorridorMap() {
               </linearGradient>
             </defs>
 
-            <path d={built.base} fill={BASE} opacity={0.85} />
+            {/*
+              LAYER PROMOTION — this is why the reveal is smooth.
+
+              An SVG is one rendering context. Change a child's opacity with
+              nothing promoted and the browser re-rasterises the WHOLE svg, and
+              this one carries 777 KB of path data — 565 KB of it in the static
+              base alone. The reveal runs 32 staggered transitions over ~1.7s, so
+              that full repaint was happening every frame for the whole reveal.
+              Vector geometry that heavy cannot be re-rasterised at 60fps, so the
+              wave arrived as a series of stills rather than as motion.
+
+              `will-change: opacity` gives each path its own cached texture. The
+              base is rasterised once and never touched again; each wave becomes
+              a GPU alpha blend instead of a vector repaint.
+
+              The base is promoted too, and that matters most: without it, every
+              sibling's fade would keep dirtying those 565 KB no matter how cheap
+              the waves themselves became.
+            */}
+            <path
+              d={built.base}
+              fill={BASE}
+              opacity={0.85}
+              style={{ willChange: layerHint }}
+            />
             {built.soon.map((d, i) => (
               <path
                 key={`s${i}`}
@@ -218,6 +272,7 @@ export function WorldCorridorMap() {
                 style={{
                   opacity: revealed ? 0.7 : 0,
                   transition: `opacity 420ms linear ${360 + i * 78}ms`,
+                  willChange: layerHint,
                 }}
               />
             ))}
@@ -229,6 +284,7 @@ export function WorldCorridorMap() {
                 style={{
                   opacity: revealed ? 0.95 : 0,
                   transition: `opacity 380ms linear ${i * 78}ms`,
+                  willChange: layerHint,
                 }}
               />
             ))}
