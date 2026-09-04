@@ -1,5 +1,42 @@
-import { useEffect, useState } from "react";
-import { useInView } from "./primitives";
+import { useEffect, useRef, useState } from "react";
+
+/*
+ * Local reveal observer — deliberately NOT the shared `useInView`.
+ *
+ * That primitive was neutralised site-wide when section animations were stripped:
+ * it returns `inView: true` on mount and its ref never attaches. The map's wave
+ * reveal was still wired to it, so every region was already at full opacity before
+ * the section came anywhere near the viewport — the animation ran, unseen, and
+ * what you scrolled to was a finished static map.
+ *
+ * This is the one place that still wants a real trigger, so it gets its own rather
+ * than un-neutering the shared hook and waking every other section back up.
+ *
+ * Threshold 0.5: the reveal starts when the map is half on screen, so the viewer
+ * is looking at it when the corridors light up.
+ */
+function useRevealOnce<T extends HTMLElement>(threshold = 0.5) {
+  const ref = useRef<T>(null);
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || revealed) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setRevealed(true);
+          io.disconnect(); // one-shot: the waves shouldn't replay on every pass
+        }
+      },
+      { threshold },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [threshold, revealed]);
+
+  return { ref, revealed };
+}
 
 type Dot = { x: number; y: number; t?: number };
 type Region = { name: string; x: number; y: number; t: number };
@@ -23,6 +60,18 @@ const MAP_WIDTH = 238;
 // Trim the empty southern ocean below the last highlighted landmass (Tasmania).
 const height = 106;
 
+/*
+ * Dot radii, against a source grid pitch of 0.5 units.
+ *
+ * These were 0.32 / 0.38, i.e. diameters of 0.64 and 0.76 — 128% and 152% of the
+ * pitch. Neighbouring dots overlapped, so landmasses fused into blobs and
+ * coastlines lost their shape. Sized under half the pitch, each dot stands alone
+ * and the continents resolve.
+ */
+const DOT_BASE = 0.17;
+const DOT_LIVE = 0.21;
+const DOT_SOON = 0.17;
+
 const BASE = "#3A3F38";
 const ACTIVE = "#9CAD1F";
 const SOON = "#5E6B2A";
@@ -35,7 +84,7 @@ const dotAt = (x: number, y: number, r: number) =>
 
 /**
  * The base landmass is one static path. The highlighted corridors are split
- * into concentric waves radiating out from the India–Gulf corridor, so they can
+ * into concentric waves radiating out from the India origin, so they can
  * switch on in sequence and read as the network populating.
  *
  * Built from the dot data on demand rather than at module load: the base path
@@ -54,7 +103,7 @@ function buildPaths(data: WorldData): Built {
     const t = p.t ?? 0;
     if (t === 1) live.push(p);
     else if (t === 2) soon.push(p);
-    else base += dotAt(p.x, p.y, 0.32);
+    else base += dotAt(p.x, p.y, DOT_BASE);
   }
 
   // origin roughly on the Arabian Sea, between India and the Gulf
@@ -71,7 +120,7 @@ function buildPaths(data: WorldData): Built {
     return waves;
   };
 
-  return { base, live: spread(live, 0.38), soon: spread(soon, 0.32), regions: data.regions ?? [] };
+  return { base, live: spread(live, DOT_LIVE), soon: spread(soon, DOT_SOON), regions: data.regions ?? [] };
 }
 
 const FULL_VIEW = `0 0 ${MAP_WIDTH} ${height}`;
@@ -89,7 +138,7 @@ function frameOf(view: string) {
 
 export function WorldCorridorMap() {
   const [view, setView] = useState(FULL_VIEW);
-  const { ref, inView } = useInView<HTMLDivElement>(0.25);
+  const { ref, revealed } = useRevealOnce<HTMLDivElement>(0.5);
   const frame = frameOf(view);
   // Null until the dot data is imported and turned into paths (see below).
   const [built, setBuilt] = useState<Built | null>(null);
@@ -138,6 +187,28 @@ export function WorldCorridorMap() {
           <>
             {/* The base landmass is on the instant it builds — its visibility
                 never rides on the reveal timing, so the map can't come up blank. */}
+{/*
+              userSpaceOnUse, spanning the map's own coordinates — not the default
+              objectBoundingBox. The live regions are drawn as 16 separate wave
+              paths, and a bounding-box gradient would restart inside each one, so
+              the ramp would visibly reset wave by wave. In user space all 16 read
+              from a single gradient laid across the whole map.
+            */}
+            <defs>
+              <linearGradient
+                id="c1x-live-grad"
+                gradientUnits="userSpaceOnUse"
+                x1="0"
+                y1="0"
+                x2="0"
+                y2={height}
+              >
+                <stop offset="0%" stopColor="#D4E84A" />
+                <stop offset="55%" stopColor="#9CAD1F" />
+                <stop offset="100%" stopColor="#6E7D12" />
+              </linearGradient>
+            </defs>
+
             <path d={built.base} fill={BASE} opacity={0.85} />
             {built.soon.map((d, i) => (
               <path
@@ -145,7 +216,7 @@ export function WorldCorridorMap() {
                 d={d}
                 fill={SOON}
                 style={{
-                  opacity: inView ? 0.7 : 0,
+                  opacity: revealed ? 0.7 : 0,
                   transition: `opacity 420ms linear ${360 + i * 78}ms`,
                 }}
               />
@@ -154,9 +225,9 @@ export function WorldCorridorMap() {
               <path
                 key={`l${i}`}
                 d={d}
-                fill={ACTIVE}
+                fill="url(#c1x-live-grad)"
                 style={{
-                  opacity: inView ? 0.95 : 0,
+                  opacity: revealed ? 0.95 : 0,
                   transition: `opacity 380ms linear ${i * 78}ms`,
                 }}
               />
@@ -190,7 +261,7 @@ export function WorldCorridorMap() {
                     : side === "above"
                       ? "translate(-50%, -140%)"
                       : "translate(0, -50%)",
-                opacity: inView ? 1 : 0,
+                opacity: revealed ? 1 : 0,
                 transitionDelay: `${1250 + i * 110}ms`,
               }}
             >

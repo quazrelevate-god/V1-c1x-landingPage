@@ -1,9 +1,9 @@
 import { Eyebrow, Parallax, ParallaxGlow, Reveal, Section } from "./primitives";
 
 const cards = [
-  "Deals negotiated with zero identity verification.",
-  "No recourse when a deal fails mid-transaction.",
-  "No infrastructure built for cross-border SME commodity trade, until now.",
+  "No verified identity behind the name on the contract.",
+  "No recourse when the deal breaks mid-transaction.",
+  "No infrastructure built for cross-border SME commodity trade.",
 ];
 
 export function Problem() {
@@ -19,10 +19,7 @@ export function Problem() {
         </Reveal>
         <Reveal delay={100}>
           <p className="font-sans text-base leading-relaxed text-secondary-foreground lg:pt-14">
-            Every year, thousands of producers, exporters, and importers negotiate deals worth hundreds of thousands
-            of dollars through unverified contacts and informal arrangements. No verified identity. No enforceable
-            terms. No protection on the payment. When a deal collapses, and they do, there is no recourse, and the
-            goods, the margin, or the money are simply gone.
+            You found the counterparty through someone who knows someone. You checked what you could check. Then you shipped, and waited to see whether the money arrived. That is how most cross-border commodity trade still works — and when it fails, there is no recourse. Only a loss you absorb.
           </p>
         </Reveal>
       </div>

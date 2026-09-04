@@ -99,6 +99,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Svatopluk:wght@400;500&family=Manrope:wght@400;500;600&display=swap",
       },
+      // Big Shoulders Display 700 — used only by the hero's ghost-type marquee.
+      // Verified to resolve; the CSS keeps Oswald / Arial Narrow behind it.
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700&display=swap",
+      },
       { rel: "icon", type: "image/png", href: "/favicon.png" },
     ],
   }),

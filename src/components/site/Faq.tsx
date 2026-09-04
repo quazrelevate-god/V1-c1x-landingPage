@@ -8,28 +8,24 @@ import { Eyebrow, Reveal, Section } from "./primitives";
 
 const faqs = [
   {
-    q: "How is my identity actually protected?",
-    a: "Identities, contact details, and company names are masked end-to-end during discovery and negotiation. They are revealed only after escrow is funded and circumvention protection is signed.",
-  },
-  {
-    q: "What stops a counterparty from going around me after one deal?",
-    a: "Circumvention protection locks every deal to the platform after the LOI, and going around it costs a trader their Trust Score.",
-  },
-  {
-    q: "How does the escrow actually work?",
-    a: "Funds are held in licensed escrow and released only on confirmed delivery, with milestone-based release and a dispute window.",
-  },
-  {
-    q: "What does the Trust Score measure?",
-    a: "Verified, closed-loop signals only: identity, trade history, on-time delivery, and dispute rate.",
-  },
-  {
-    q: "Which commodities and corridors do you support?",
-    a: "Agriculture, food, crude oil, and minerals. India-Gulf corridors are live now.",
+    q: "Who is actually holding my money?",
+    a: "A licensed, regulated escrow partner, in segregated client accounts. Corridor One X never takes custody of funds and cannot move them outside the milestone schedule. Full custody, partner and jurisdiction details are walked through on the demo call.",
   },
   {
     q: "What does it cost?",
-    a: "Book a demo for current pricing.",
+    a: "One fee, charged at settlement, on deals that close. No subscription, no listing fee, nothing to browse or negotiate. If a deal does not complete, you owe nothing.",
+  },
+  {
+    q: "Is my money locked up until delivery?",
+    a: "No. Escrow releases in stages against verified milestones — loading, documents, delivery — so a seller is paid progressively rather than at the end.",
+  },
+  {
+    q: "How is my identity protected, and what stops a counterparty going around me?",
+    a: "Names, contacts and company details are masked end to end through discovery and negotiation, and revealed only once escrow is funded. Circumvention protection then locks the deal to the platform, and going around it costs a trader their Trust Score — which is the only thing that gets them their next deal.",
+  },
+  {
+    q: "What happens when a deal goes wrong?",
+    a: "A dispute pauses the release schedule while both sides submit evidence — shipping documents, quality reports, inspection records. The platform reviews the evidence against the LOI terms and issues a decision. The full dispute policy — reviewers, timelines, recovery and appeal — is walked through on the demo call.",
   },
 ];
 

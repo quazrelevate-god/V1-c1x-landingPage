@@ -1,21 +1,24 @@
 import logo from "@/assets/logo.png";
+import { useSectionLink } from "@/lib/section-scroll";
 
 const links = [
   { label: "About", href: "/about" },
-  { label: "How It Works", href: "/#how-it-works" },
+  // The one section link down here; the rest are their own routes.
+  { label: "How It Works", href: "/#how-it-works", hash: "how-it-works" },
   { label: "Book a Demo", href: "/book-a-demo" },
   { label: "Privacy", href: "/" },
   { label: "Contact", href: "/book-a-demo" },
-];
+] as const;
 
 export function Footer() {
+  const onSectionClick = useSectionLink();
   return (
-    <footer className="border-t border-border px-5 py-12 sm:px-6 sm:py-14">
+    <footer data-nav-tone="dark" className="border-t border-border px-5 py-12 sm:px-6 sm:py-14">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 md:flex-row md:items-start md:justify-between">
         <div className="max-w-sm">
           <img src={logo} alt="Corridor One X" className="h-6 w-auto" />
           <p className="mt-5 font-sans text-sm leading-relaxed text-muted-foreground">
-            Corridor One X. Next-generation trade infrastructure for India &amp; the Gulf.
+            Corridor One X — next-generation infrastructure for verified commodity trade.
           </p>
         </div>
         <ul className="flex flex-wrap gap-x-8 gap-y-3">
@@ -23,6 +26,9 @@ export function Footer() {
             <li key={l.label}>
               <a
                 href={l.href}
+                onClick={(e) => {
+                  if ("hash" in l) onSectionClick(e, l.hash);
+                }}
                 className="font-sans text-sm text-secondary-foreground transition-colors hover:text-accent"
               >
                 {l.label}

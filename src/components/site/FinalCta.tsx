@@ -22,7 +22,11 @@ export function FinalCta() {
     <section
       ref={ref}
       id="book-a-demo"
-      className="corridor-glow glow-animate relative overflow-hidden px-5 py-24 sm:px-6 sm:py-32 md:py-44"
+      data-nav-tone="dark"
+      // Matched to the Section primitive's rhythm (py-20 / 24 / 32). It was
+      // md:py-44, which stacked against the FAQ's own md:py-32 above it and left
+      // a gap roughly two and a half times every other section boundary.
+      className="corridor-glow glow-animate relative overflow-hidden px-5 py-20 sm:px-6 sm:py-24 md:py-32"
     >
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <Parallax speed={0.35} className="absolute -inset-y-[30%] inset-x-0">
@@ -59,8 +63,7 @@ export function FinalCta() {
         </Reveal>
         <Reveal delay={100}>
           <p className="mx-auto mt-7 max-w-xl font-sans text-base leading-relaxed text-secondary-foreground">
-            Whether you move 50 tonnes or 5,000, you get the same verification, the same protection,
-            and the same direct access to the global market.
+            Whether you move 50 tonnes or 5,000, you get the same verification, the same protection, and the same direct access to the market.
           </p>
         </Reveal>
         <Reveal delay={180}>
@@ -73,7 +76,7 @@ export function FinalCta() {
             </a>
           </div>
           <p className="mt-6 font-sans text-sm text-muted-foreground">
-            A 20-minute walkthrough of how a verified deal closes on Corridor One X. No obligation.
+            Twenty minutes. We walk one closed deal end to end, with the real numbers.
           </p>
         </Reveal>
       </div>

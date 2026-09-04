@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="512" height="512" role="img" aria-label="Corridor One X solid silhouette">
+  <title>Corridor One X — solid silhouette</title>
+  <!--
+    Mask-only asset. Do not use this as the visible logo.
+
+    The real mark (corridor-one-x-mark.svg) is four separate chevron paths with
+    four gaps at the diagonal corners and a large empty rhombus in the centre.
+    That makes it useless as a shrinking aperture: there is no enclosed interior
+    to see through, so a window masked with it shows the page background in the
+    middle and leaks at all four corners.
+
+    This traces the OUTER edge of each of those four chevrons and bridges the
+    four corner gaps with straight segments, giving one closed, filled,
+    four-pointed star — points on the diagonals, edges curving inward. Same
+    silhouette as the logo, no hole, no gaps, so it can be scaled from
+    viewport-filling down to mark size as a mask.
+
+    The four bridges are, in viewBox units:
+      top-left      (0.00, 2.72)  -> (2.72,  0.00)   [the implicit close, Z]
+      top-right     (15.26, 0.00) -> (17.98, 2.72)
+      bottom-right  (17.98, 15.26)-> (15.26, 17.98)
+      bottom-left   (2.72, 17.98) -> (0.00,  15.26)
+
+    White fill so it reads correctly under both mask-mode: alpha and luminance.
+  -->
+  <path
+    fill="#fff"
+    d="M2.71685 0
+       L8.18656 3.53545
+       C8.67479 3.85102 9.30267 3.85101 9.7909 3.53545
+       L15.2607 0
+       L17.9794 2.71783
+       L14.4439 8.18754
+       C14.1284 8.67576 14.1284 9.30365 14.4439 9.79188
+       L17.9794 15.2616
+       L15.2608 17.9814
+       L9.7911 14.446
+       C9.30288 14.1304 8.67499 14.1304 8.18676 14.446
+       L2.717 17.9814
+       L0.000244179 15.2634
+       L3.53569 9.79367
+       C3.85126 9.30544 3.85126 8.67755 3.53569 8.18932
+       L0.000244727 2.71957
+       Z"
+  />
+</svg>

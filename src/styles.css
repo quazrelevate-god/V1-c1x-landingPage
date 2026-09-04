@@ -80,6 +80,11 @@
 
   html {
     scroll-behavior: smooth;
+    /* Horizontal is locked, not just clipped. Nothing actually overflowed the
+       viewport — `overflow-x: hidden` below was already containing it — but
+       `hidden` still leaves a scrollable horizontal port, so a sideways drag
+       rubber-banded the whole page on a phone. This stops that. */
+    overscroll-behavior-x: none;
   }
 
   body {
@@ -87,8 +92,20 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    /* Two declarations on purpose: `clip` is not merely a tidier `hidden`, it
+       makes the box unscrollable outright, so scrollLeft cannot move at all.
+       `hidden` stays first as the fallback for engines that drop `clip`. */
     overflow-x: hidden;
-    max-width: 100vw;
+    overflow-x: clip;
+    overscroll-behavior-x: none;
+    /* Vertical panning and pinch-zoom are untouched; a horizontal pan simply
+       never starts. pinch-zoom is listed deliberately — omitting it would take
+       zoom away from low-vision users to fix a scrolling bug. */
+    touch-action: pan-y pinch-zoom;
+    /* 100vw includes the scrollbar, so on a desktop with a classic scrollbar it
+       is wider than the content box and causes the very overflow it looks like
+       it is preventing. */
+    max-width: 100%;
   }
 
 

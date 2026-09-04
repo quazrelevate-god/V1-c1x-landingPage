@@ -262,7 +262,7 @@ const BY_ISO2 = new Map(COUNTRIES.map((c) => [c.iso2, c]));
 /** The corridor the product is built around, surfaced above the full list. */
 export const PRIORITY_ISO2 = ["IN", "AE", "SA", "OM", "QA", "KW", "BH"] as const;
 
-/** Default selection — the India–Gulf corridor starts in India. */
+/** Default selection — corridors originate in India. */
 export const DEFAULT_ISO2 = "IN";
 
 export function countryByIso2(iso2: string): Country | undefined {

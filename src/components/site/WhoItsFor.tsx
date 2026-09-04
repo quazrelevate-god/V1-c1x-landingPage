@@ -5,22 +5,22 @@ import { ProducersDiagram, ExportersDiagram, ImportersDiagram } from "./Audience
 const audiences = [
   {
     label: "Producers",
-    title: "You produced it. Sell it directly.",
+    title: "You produced it. Sell it yourself.",
     diagram: ProducersDiagram,
     points: [
-      "If you harvest, extract, or manufacture the commodity yourself, you don't need to be an exporter.",
-      "Reach verified buyers directly, with no trader in between.",
-      "Move low-volume or aging stock before it loses value.",
+      "Reach verified buyers with no trader in between.",
+      "You do not need to be an exporter to reach an export market.",
+      "Move ageing or low-volume stock before it loses value.",
     ],
   },
   {
     label: "Exporters",
-    title: "Stop chasing unverified buyers.",
+    title: "Buyers whose money is already committed.",
     diagram: ExportersDiagram,
     points: [
-      "Verified buyers with real intent on record.",
-      "Get paid through escrow before you take on risk.",
-      "Build a Trust Score that travels with you.",
+      "Every buyer verified before they reach you.",
+      "Escrow funded before you load.",
+      "A Trust Score that follows you into the next deal.",
     ],
   },
   {
@@ -28,9 +28,9 @@ const audiences = [
     title: "Stop wiring money into hope.",
     diagram: ImportersDiagram,
     points: [
-      "Verified suppliers with a proven track record.",
-      "Quality and documents checked before release.",
-      "Funds released only on confirmed delivery.",
+      "Suppliers with a settled track record, not a reference letter.",
+      "Documents and quality checked before release.",
+      "Funds move on delivery, not on promise.",
     ],
   },
 ];
@@ -84,13 +84,15 @@ function TiltCard({ a }: { a: (typeof audiences)[number] }) {
 
 export function WhoItsFor() {
   return (
-    <section id="who-its-for" className="relative overflow-hidden bg-light-surface-alt px-5 py-20 text-ink sm:px-6 sm:py-24 md:py-32">
+    // Top padding trimmed and the background matched to Proof above, so the
+    // figures and this block read as one continuous section rather than two.
+    <section id="who-its-for" data-nav-tone="light" className="relative overflow-hidden bg-light-surface-alt px-5 pt-10 pb-20 text-ink sm:px-6 sm:pt-12 sm:pb-24 md:pb-32">
       <div className="mx-auto w-full max-w-6xl">
-        <div className="max-w-3xl">
+        <div className="mx-auto max-w-3xl text-center lg:mx-0 lg:text-left">
           <Reveal>
-            <Eyebrow tone="light">Who It's For</Eyebrow>
+            <Eyebrow tone="light">Where You Sit</Eyebrow>
             <h2 className="mt-6 font-display text-3xl leading-[1.1] tracking-[-0.03em] text-ink md:text-4xl lg:text-[2.75rem]">
-              One platform. Three sides of the same deal.
+              One deal. Three sides. The same protection on each.
             </h2>
           </Reveal>
         </div>
