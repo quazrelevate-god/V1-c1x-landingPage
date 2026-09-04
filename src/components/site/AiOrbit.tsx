@@ -56,14 +56,23 @@ const P_ORBIT_END = 0.80;
  */
 const sunPx = (w: number) => (w < 768 ? 67 : 96);
 /*
- * Starting mask size for the aperture.
+ * Starting mask size for the aperture, as a multiple of the viewport diagonal.
  *
  * The silhouette's concave edges dip in to 3.54/18, so only the middle ~60% of its
  * bounding box is guaranteed solid. To land the whole viewport inside solid area at
  * p=0 — 100% video, zero shape — this has to be roughly 1.8x the viewport diagonal.
- * 5000px covers a 2560x1440 display with room to spare.
+ * 1.85 keeps a small margin over that without buying dead scroll.
+ *
+ * It used to be a flat 5000px, sized for a 2560x1440 screen "with room to spare".
+ * That room was the bug: on a 1440x900 viewport the mask only starts biting at
+ * ~3057px, so the whole 5000 → 3057 stretch changed nothing on screen. Solved
+ * back through the easing that was 17.6% of the section — about 70svh, the best
+ * part of a screen height — spent scrolling with the picture perfectly still.
  */
-const APERTURE_START_PX = 5000;
+const APERTURE_COVER = 1.85;
+
+/** Pre-measurement fallback. Covers any display; replaced on the first frame. */
+const APERTURE_START_FALLBACK = 5000;
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -190,6 +199,7 @@ export function AiOrbit() {
   const raf = useRef(0);
   const [p, setP] = useState(0);
   const [sunSize, setSunSize] = useState(96);
+  const [apertureStart, setApertureStart] = useState(APERTURE_START_FALLBACK);
   const [isMobile, setIsMobile] = useState(false);
 
   // Autoplay-on-muted normally works, but some contexts (backgrounded tabs, dev preview
@@ -239,6 +249,14 @@ export function AiOrbit() {
         const next = sunPx(window.innerWidth);
         return prev === next ? prev : next;
       });
+      // Sized to THIS viewport, so the shape starts biting on the first scroll
+      // rather than after a screenful of invisible shrinking.
+      setApertureStart((prev) => {
+        const next = Math.round(
+          Math.hypot(window.innerWidth, window.innerHeight) * APERTURE_COVER,
+        );
+        return prev === next ? prev : next;
+      });
       setIsMobile((prev) => {
         const next = window.matchMedia(ORBIT_MOBILE_MQ).matches;
         return prev === next ? prev : next;
@@ -272,8 +290,19 @@ export function AiOrbit() {
   }, []);
 
   // ─── Phase 1: reverse aperture — the silhouette shrinks to mark size ──────
-  const apertureShrink = easeInOutCubic(clamp01(p / P_APERTURE_END));
-  const apertureSizePx = lerp(APERTURE_START_PX, sunSize, apertureShrink);
+  /*
+   * easeOutCubic, not easeInOutCubic.
+   *
+   * An ease-in-out leaves at zero rate: however well the start size is chosen,
+   * the first stretch of scroll still moves the mask barely at all. Sizing alone
+   * cut the dead scroll from ~70svh to ~21svh; this removes the rest, because
+   * the shape now starts collapsing on the very first frame of the section.
+   *
+   * It also lands better. The fast opening reads as the aperture giving way, and
+   * the long tail decelerates into the sun instead of arriving at speed.
+   */
+  const apertureShrink = easeOutCubic(clamp01(p / P_APERTURE_END));
+  const apertureSizePx = lerp(apertureStart, sunSize, apertureShrink);
 
   /* Portrait cut on a portrait screen, landscape on landscape — each plays at
      native resolution, so neither is zoomed or cropped. */
