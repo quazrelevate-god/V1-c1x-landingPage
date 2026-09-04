@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useSectionLink } from "@/lib/section-scroll";
-import slide1 from "@/assets/hero-slides/slide-1.png";
-import slide2 from "@/assets/hero-slides/slide-2.png";
-import slide3 from "@/assets/hero-slides/slide-3.png";
-import slide4 from "@/assets/hero-slides/slide-4.png";
+import slide1 from "@/assets/hero-slides/slide-1.webp";
+import slide2 from "@/assets/hero-slides/slide-2.webp";
+import slide3 from "@/assets/hero-slides/slide-3.webp";
+import slide4 from "@/assets/hero-slides/slide-4.webp";
 import { assetSrc } from "@/lib/media";
 
 const headline = "Trade direct. No unverified hands in between.";
@@ -14,10 +14,10 @@ const subhead =
 /* CDN when VITE_MEDIA_BASE is set, bundled copies otherwise. The imports stay:
    they are what the fallback resolves to. */
 const slides = [
-  assetSrc("hero-slide-1.png", slide1),
-  assetSrc("hero-slide-2.png", slide2),
-  assetSrc("hero-slide-3.png", slide3),
-  assetSrc("hero-slide-4.png", slide4),
+  assetSrc("hero-slide-1.webp", slide1),
+  assetSrc("hero-slide-2.webp", slide2),
+  assetSrc("hero-slide-3.webp", slide3),
+  assetSrc("hero-slide-4.webp", slide4),
 ];
 const SLIDE_INTERVAL_MS = 4000;
 

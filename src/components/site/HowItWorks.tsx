@@ -1,9 +1,9 @@
 import { useEffect, useRef } from "react";
 import { Eyebrow, ParallaxGlow, Reveal, Section } from "./primitives";
-import bento1 from "@/assets/bento/bento-1.png";
-import bento2 from "@/assets/bento/bento-2.png";
-import bento3 from "@/assets/bento/bento-3.png";
-import bento4 from "@/assets/bento/bento-4.png";
+import bento1 from "@/assets/bento/bento-1.webp";
+import bento2 from "@/assets/bento/bento-2.webp";
+import bento3 from "@/assets/bento/bento-3.webp";
+import bento4 from "@/assets/bento/bento-4.webp";
 import { assetSrc } from "@/lib/media";
 
 /*
@@ -40,7 +40,7 @@ const steps: Step[] = [
     title: "Verify & Match",
     layout: "wide",
     span: "lg:col-span-3",
-    media: assetSrc("bento-1.png", bento1),
+    media: assetSrc("bento-1.webp", bento1),
     body: "Nobody reaches you unverified. Identities clear KYC and KYB before a listing is visible, then the AI ranks counterparties on grade, volume, corridor and settled history.",
   },
   {
@@ -48,7 +48,7 @@ const steps: Step[] = [
     title: "Agree",
     layout: "stack",
     span: "lg:col-span-2",
-    media: assetSrc("bento-2.png", bento2),
+    media: assetSrc("bento-2.webp", bento2),
     body: "Both sides negotiate through a masked relay and sign a digital LOI. Contract directly, or through Corridor One X as principal. Neither name is revealed yet.",
   },
   {
@@ -56,7 +56,7 @@ const steps: Step[] = [
     title: "Secure",
     layout: "split",
     span: "lg:col-span-2",
-    media: assetSrc("bento-3.png", bento3),
+    media: assetSrc("bento-3.webp", bento3),
     body: "The buyer funds escrow. Only then are identities exchanged. Samples route through us if you want to inspect first, so nothing is exposed before the money is committed.",
   },
   {
@@ -64,7 +64,7 @@ const steps: Step[] = [
     title: "Move & settle",
     layout: "wide",
     span: "lg:col-span-3",
-    media: assetSrc("bento-4.png", bento4),
+    media: assetSrc("bento-4.webp", bento4),
     body: "Goods ship by sea, air or road — yours to arrange, or ours end to end with the seller still masked. Documents are verified at each milestone and escrow releases against them.",
   },
 ];

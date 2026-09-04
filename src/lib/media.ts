@@ -16,14 +16,14 @@
  *
  *   orbit-desktop.mp4     section 3 footage, 16:9
  *   orbit-mobile.mp4      section 3 footage, 9:16
- *   hero-slide-1.png      hero slideshow, in order
- *   hero-slide-2.png
- *   hero-slide-3.png
- *   hero-slide-4.png
- *   bento-1.png           How It Works cards, in order
- *   bento-2.png
- *   bento-3.png
- *   bento-4.png
+ *   hero-slide-1.webp     hero slideshow, in order
+ *   hero-slide-2.webp
+ *   hero-slide-3.webp
+ *   hero-slide-4.webp
+ *   bento-1.webp          How It Works cards, in order
+ *   bento-2.webp
+ *   bento-3.webp
+ *   bento-4.webp
  *   hero-desktop-480.mp4  CTA backdrop loop
  *
  * Plain names rather than Vite's content hashes is the point: a re-encoded or
