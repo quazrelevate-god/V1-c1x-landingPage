@@ -1,6 +1,8 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import type { MouseEvent } from "react";
 
+import { getLenis } from "./smooth-scroll";
+
 /*
  * Scrolling to a section of the landing page.
  *
@@ -33,11 +35,25 @@ export function scrollToSection(id: string, smooth: boolean): boolean {
   if (!el) return false;
   const header = document.querySelector("header");
   const offset = header ? header.getBoundingClientRect().height : 0;
-  const top = el.getBoundingClientRect().top + window.scrollY - offset;
-  window.scrollTo({
-    top: Math.max(0, top),
-    behavior: smooth ? "smooth" : "instant",
-  });
+  const top = Math.max(0, el.getBoundingClientRect().top + window.scrollY - offset);
+
+  /*
+   * Hand the jump to Lenis when it is running. Calling window.scrollTo instead
+   * would start a second animation over the top of Lenis's rAF loop, and the
+   * two would trade the scroll position back and forth for the length of the
+   * journey — visible as a stutter the whole way down.
+   *
+   * `immediate` covers the settle passes, which must land in one frame so the
+   * next correction is not interrupting an animation still in flight.
+   */
+  const lenis = getLenis();
+  if (lenis) {
+    lenis.scrollTo(top, smooth ? {} : { immediate: true });
+    return true;
+  }
+
+  // No Lenis: reduced motion, or before mount. Fall back to the native path.
+  window.scrollTo({ top, behavior: smooth ? "smooth" : "instant" });
   return true;
 }
 

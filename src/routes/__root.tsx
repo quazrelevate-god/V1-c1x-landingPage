@@ -10,6 +10,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import { useSmoothScroll } from "../lib/smooth-scroll";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
@@ -131,6 +132,8 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  // Mounted once, at the root, so every route inherits the same scroll feel.
+  useSmoothScroll();
 
   return (
     <QueryClientProvider client={queryClient}>

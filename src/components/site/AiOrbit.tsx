@@ -8,21 +8,16 @@ import RadialOrbitalTimeline, { type TimelineItem } from "@/components/ui/radial
  * strip in an 812px pane and had to be scaled 1.8x to read, cropping roughly
  * half its width. Two purpose-cut sources remove that compromise: each already
  * matches the shape of the screen it plays on, so neither is zoomed or cropped.
- *
- * The aspect travels with its source. It sizes the letterbox bands, so a wrong
- * value here silently lets a band overlap the picture.
  */
 import mockDesktop from "@/assets/mock-desktop.mp4";
 import mockMobile from "@/assets/mock-mobile.mp4";
 
-const DESKTOP_CLIP = { src: mockDesktop, aspect: 16 / 9 }; // 1920 x 1080
-const MOBILE_CLIP = { src: mockMobile, aspect: 9 / 16 };   //  720 x 1280 portrait
+const DESKTOP_CLIP = { src: mockDesktop }; // 1920 x 1080, 16:9
+const MOBILE_CLIP = { src: mockMobile };   //  720 x 1280, 9:16 portrait
 
 /** Below this the portrait cut plays. Same cutoff as the sun size. */
 const ORBIT_MOBILE_MQ = "(max-width: 767px)";
 
-/** Sits in the band below the picture. */
-const BAND_PAYOFF = "Now everything is verified before you speak.";
 
 /*
  * Scroll phases across the pinned section, in normalised progress (0..1).
@@ -194,23 +189,8 @@ export function AiOrbit() {
   // Scroll events are coalesced through a single rAF tick to avoid layout thrash.
   const raf = useRef(0);
   const [p, setP] = useState(0);
-  /*
-   * Reduced motion needs its own flag rather than riding on the scroll effect.
-   * That effect returns before subscribing, so `p` stays 0 — and the band payoff
-   * line is derived from p, so it would sit at opacity 0 forever. This lets both
-   * band lines render resolved and untransformed instead.
-   */
-  const [reducedMotion, setReducedMotion] = useState(false);
   const [sunSize, setSunSize] = useState(96);
   const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const sync = () => setReducedMotion(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
 
   // Autoplay-on-muted normally works, but some contexts (backgrounded tabs, dev preview
   // panes) refuse it. Force a play() on mount, then again on the first user gesture, so
@@ -281,8 +261,8 @@ export function AiOrbit() {
     compute();
     window.addEventListener("scroll", onScroll, { passive: true });
     // Resize calls compute directly rather than going through onScroll, which
-    // sits behind an rAF guard that can early-return. Breakpoint state — the clip,
-    // its aspect, the sun size — must be rewritten on every resize regardless.
+    // sits behind an rAF guard that can early-return. Breakpoint state — which
+    // clip plays, the sun size — must be rewritten on every resize regardless.
     window.addEventListener("resize", compute);
     return () => {
       window.removeEventListener("scroll", onScroll);
@@ -295,16 +275,9 @@ export function AiOrbit() {
   const apertureShrink = easeInOutCubic(clamp01(p / P_APERTURE_END));
   const apertureSizePx = lerp(APERTURE_START_PX, sunSize, apertureShrink);
 
-  /*
-   * Active clip and the band it leaves over.
-   *
-   * Derived from the SAME `isMobile` that picks the source, so the bands can
-   * never be sized against the aspect of a clip that is not playing. The old
-   * value lived in a CSS custom property that was never actually defined, so the
-   * bands silently fell back to their min-height instead of the real gap.
-   */
+  /* Portrait cut on a portrait screen, landscape on landscape — each plays at
+     native resolution, so neither is zoomed or cropped. */
   const clip = isMobile ? MOBILE_CLIP : DESKTOP_CLIP;
-  const bandHeight = `calc((100% - min(100%, 100vw / ${clip.aspect})) / 2)`;
 
   // ─── Phase 2: silhouette → real lime mark + copy rises ────────────────────
   const p2 = clamp01((p - P_APERTURE_END) / (P_SUN_END - P_APERTURE_END));
@@ -313,24 +286,6 @@ export function AiOrbit() {
   const apertureOpacity = 1 - easeInOutCubic(p2); // 1 → 0
   const solidSun = easeInOutCubic(p2); // 0 → 1
   const copyReveal = easeOutCubic(clamp01((p - (P_APERTURE_END + 0.02)) / (P_SUN_END - P_APERTURE_END)));
-
-  /*
-   * ─── Letterbox band copy ────────────────────────────────────────────────
-   *
-   * Both lines read the `p` the aperture already computes — no second scroll
-   * listener, no observer.
-   *
-   * They also have to clear out before the section's own header arrives: that
-   * fades in from P_APERTURE_END + 0.02 (0.40) and sits at pt-[12svh], which is
-   * inside the top band. So the bands finish leaving by 0.36. Nothing here
-   * changes an existing constant; these are new values derived from p.
-   */
-  // 1 while the bands are the composition, easing to 0 before the header lands.
-  const bandsAlive = 1 - easeInOutCubic(clamp01((p - 0.24) / 0.12));
-  // The payoff resolves just after arrival, while the video is still full width.
-  const payoffIn = easeOutCubic(clamp01((p - 0.02) / 0.12));
-
-  const payoffOpacity = reducedMotion ? 1 : payoffIn * bandsAlive;
 
   // ─── Phase 3: orbit bloom ─────────────────────────────────────────────────
   const orbitReveal = easeOutCubic(clamp01((p - P_SUN_END) / (P_ORBIT_END - P_SUN_END)));
@@ -394,55 +349,13 @@ export function AiOrbit() {
         </div>
 
         {/*
-          LETTERBOX BAND COPY — real DOM text, selectable and read aloud.
+          Both letterbox bands are deliberately empty.
 
-          Absolutely positioned rather than laid out in a column with the video:
-          the video's box is never touched, so it cannot resize or shift when the
-          payoff line resolves, and the aperture timing is untouched.
-
-          Each band is exactly the dead space the contained video leaves over, so
-          the type consumes it instead of floating in an oversized box.
-
-          z-[5]: above the footage, below the content stack at z-10 — the header
-          wins if the two ever overlap during the handoff.
+          The top band's prompt line went first — it collided with the fixed nav,
+          which sits over the same strip. The bottom band's payoff line has now
+          gone too, so the footage carries the section on its own and the bands
+          are simply the dead space each clip leaves over.
         */}
-        {/* Top band is deliberately empty. The prompt line that lived here was
-            colliding with the fixed nav, which sits over the same strip — the
-            payoff line below carries the section on its own. */}
-
-        {/*
-          The band is exactly what the video leaves over — no min-height floor.
-          A floor was here for the old 3:1 clip, whose band all but vanished
-          under the mobile zoom; against a 16:9 cut it did the opposite, forcing
-          a 72px band over a 45px gap and pushing the line up onto the picture.
-
-          Both clips now roughly match their screen's orientation, so the natural
-          band is enough: ~75px on a 390-wide phone, ~45px on a 1440x900 desktop
-          against a 36px line. The scrim covers the tight desktop case, where a
-          descender can graze the footage.
-        */}
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] flex items-center justify-center px-6 pb-2"
-          style={{
-            height: bandHeight,
-            backgroundImage:
-              "linear-gradient(to bottom, transparent, rgba(0,0,0,0.85) 45%, #000 100%)",
-          }}
-        >
-          <p
-            className="mx-auto max-w-[34ch] text-center font-display text-[1.25rem] leading-[1.25] font-medium tracking-[-0.02em] text-balance text-foreground sm:text-[1.5rem] lg:text-[1.8rem]"
-            style={{
-              opacity: payoffOpacity,
-              // Blur-resolve: opacity 0→1, blur 12px→0, translateY 18px→0.
-              filter: reducedMotion ? undefined : `blur(${((1 - payoffIn) * 12).toFixed(2)}px)`,
-              transform: reducedMotion
-                ? undefined
-                : `translateY(${((1 - payoffIn) * 18).toFixed(2)}px)`,
-            }}
-          >
-            {BAND_PAYOFF}
-          </p>
-        </div>
 
         {/* CONTENT STACK — vertical flex column. Header / stage / footer split
             the pane height; the stage owns everything between the two. */}

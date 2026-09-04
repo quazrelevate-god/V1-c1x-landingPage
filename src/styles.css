@@ -79,7 +79,12 @@
   }
 
   html {
-    scroll-behavior: smooth;
+    /*
+     * `auto`, not `smooth`. Lenis animates the scroll position itself; leaving
+     * the CSS smoothing on means the browser tries to ease the same jump at the
+     * same time and the two fight, which reads as stutter on every nav link.
+     */
+    scroll-behavior: auto;
     /* Horizontal is locked, not just clipped. Nothing actually overflowed the
        viewport — `overflow-x: hidden` below was already containing it — but
        `hidden` still leaves a scrollable horizontal port, so a sideways drag

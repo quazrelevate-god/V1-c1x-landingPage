@@ -31,6 +31,21 @@ const P_EXPAND_END = 0.45;
 const P_HOLD_END = 0.55;
 
 /*
+ * When the nav drops in: exactly the hold beat.
+ *
+ * Derived from the two beat markers rather than given its own numbers, so the
+ * nav cannot drift out of step if the beats are ever retimed. The card finishes
+ * expanding at P_EXPAND_END and only begins burying at P_HOLD_END, so the whole
+ * entrance happens while the card is sitting still at full bleed — it follows
+ * the card into place rather than racing it there.
+ *
+ * Being derived from scroll position rather than fired as a one-shot event, it
+ * reverses on the way back up for free.
+ */
+const P_NAV_IN_START = P_EXPAND_END;
+const P_NAV_IN_END = P_HOLD_END;
+
+/*
  * Resting geometry per breakpoint. These MUST mirror the card's Tailwind classes
  * exactly — those classes are what render before this effect runs and what stands
  * under reduced motion, so any drift between the two shows as a jump on first
@@ -146,7 +161,13 @@ export function Hero() {
      * classes already describe the resting frame — inset, rounded, unblurred — so
      * doing nothing leaves a correct, complete composition on screen.
      */
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      // The nav's entrance is scroll-driven, and nothing below this line will
+      // run to drive it. Seat it immediately rather than leaving it hidden for
+      // the whole page.
+      document.documentElement.style.setProperty("--nav-reveal", "1");
+      return;
+    }
 
     const mobileMq = window.matchMedia(MOBILE_MQ);
     let raf = 0;
@@ -197,6 +218,15 @@ export function Hero() {
        * cream, and it has to flip. Every other section declares a fixed tone.
        */
       section.dataset["navTone"] = cardTopNow < 40 ? "dark" : "light";
+
+      /*
+       * The nav's entrance, published as a CSS variable rather than React state.
+       * This runs every frame of the hero; a setState here would re-render the
+       * nav on each one. As a custom property the browser just re-resolves a
+       * transform, and Nav never re-renders at all.
+       */
+      const navIn = clamp01((p - P_NAV_IN_START) / (P_NAV_IN_END - P_NAV_IN_START));
+      document.documentElement.style.setProperty("--nav-reveal", navIn.toFixed(3));
       card.style.bottom = `${lerp(r.bottom, 0, e).toFixed(1)}px`;
       card.style.borderRadius = `${lerp(r.radius, 0, e).toFixed(1)}px`;
       card.style.boxShadow = `0 24px 60px -20px rgba(0,0,0,${lerp(0.35, 0, e).toFixed(3)})`;
@@ -242,6 +272,9 @@ export function Hero() {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", apply);
       if (raf) cancelAnimationFrame(raf);
+      // Leaving on another route: nothing there drives this, and every other
+      // page wants its nav from the first frame.
+      document.documentElement.style.setProperty("--nav-reveal", "1");
     };
   }, []);
 
