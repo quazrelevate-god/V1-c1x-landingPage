@@ -226,6 +226,22 @@ export function AiOrbit() {
   }, []);
 
   useEffect(() => {
+    /*
+     * Only compute while the section is on screen.
+     *
+     * Without this the scroll handler ran for the WHOLE page: every frame of
+     * every scroll, anywhere, called setP and re-rendered this section's 85
+     * nodes plus the seven orbit planets. Hero has always gated on visibility;
+     * this one never did, so section 3 was paying full price while the visitor
+     * was reading the FAQ.
+     *
+     * Lenis made it considerably worse. Native scrolling fires events only while
+     * the wheel is actually moving; an inertial scroller animates the position
+     * for most of a second after each notch, so the handler now runs on many
+     * more frames than it used to.
+     */
+    let inView = true;
+
     const compute = () => {
       raf.current = 0;
       const section = sectionRef.current;
@@ -277,9 +293,24 @@ export function AiOrbit() {
     const onScroll = () => {
       // Coalesce bursts of scroll events through a single rAF tick so we set state
       // at most once per frame — but never trailing behind by more than that frame.
-      if (raf.current) return;
+      if (!inView || raf.current) return;
       raf.current = requestAnimationFrame(compute);
     };
+
+    /*
+     * A generous margin: the section is 500svh, so it counts as "near" well
+     * before its top edge arrives. That leaves the aperture already at the right
+     * value on the frame it becomes visible, rather than snapping to it.
+     */
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        inView = entry?.isIntersecting ?? true;
+        if (inView) compute();
+      },
+      { rootMargin: "200px 0px" },
+    );
+    io.observe(sectionRef.current as Element);
+
     compute();
     window.addEventListener("scroll", onScroll, { passive: true });
     // Resize calls compute directly rather than going through onScroll, which
@@ -287,6 +318,7 @@ export function AiOrbit() {
     // clip plays, the sun size — must be rewritten on every resize regardless.
     window.addEventListener("resize", compute);
     return () => {
+      io.disconnect();
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", compute);
       if (raf.current) cancelAnimationFrame(raf.current);

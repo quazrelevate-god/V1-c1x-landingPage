@@ -94,17 +94,39 @@ export default function RadialOrbitalTimeline({
     if (!autoRotate || !bloomed) return;
     let raf = 0;
     let last = 0;
+    /*
+     * Pause whenever the ring is off screen.
+     *
+     * `bloomed` alone was not enough: it latches true once the orbit has formed
+     * and stays true, so this loop kept calling setState sixty times a second —
+     * re-rendering all seven planets — for the entire rest of the page, long
+     * after the section had scrolled away. Nothing was visible to show for it.
+     */
+    let visible = true;
+    const io = new IntersectionObserver(([entry]) => {
+      visible = entry?.isIntersecting ?? true;
+      // Drop the stale timestamp: resuming with `last` from before the pause
+      // would apply the whole gap as one jump.
+      if (!visible) last = 0;
+    });
+    if (containerRef.current) io.observe(containerRef.current);
+
     const DEG_PER_MS = 0.18 / 50; // unchanged speed: 0.18deg every 50ms
     const tick = (ts: number) => {
-      if (last) {
-        const dt = ts - last;
-        applyRotation((rotationRef.current + dt * DEG_PER_MS) % 360);
+      if (visible) {
+        if (last) {
+          const dt = ts - last;
+          applyRotation((rotationRef.current + dt * DEG_PER_MS) % 360);
+        }
+        last = ts;
       }
-      last = ts;
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      io.disconnect();
+      cancelAnimationFrame(raf);
+    };
     // applyRotation is a stable closure over refs/setState; re-running this on it
     // would restart the loop every frame.
     // eslint-disable-next-line react-hooks/exhaustive-deps
