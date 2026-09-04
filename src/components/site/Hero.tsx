@@ -5,12 +5,20 @@ import slide1 from "@/assets/hero-slides/slide-1.png";
 import slide2 from "@/assets/hero-slides/slide-2.png";
 import slide3 from "@/assets/hero-slides/slide-3.png";
 import slide4 from "@/assets/hero-slides/slide-4.png";
+import { assetSrc } from "@/lib/media";
 
 const headline = "Trade direct. No unverified hands in between.";
 const subhead =
   "Corridor One X connects verified producers, exporters, and importers directly. AI matching, autonomous settlement, and escrow-secured payment.";
 
-const slides = [slide1, slide2, slide3, slide4];
+/* CDN when VITE_MEDIA_BASE is set, bundled copies otherwise. The imports stay:
+   they are what the fallback resolves to. */
+const slides = [
+  assetSrc("hero-slide-1.png", slide1),
+  assetSrc("hero-slide-2.png", slide2),
+  assetSrc("hero-slide-3.png", slide3),
+  assetSrc("hero-slide-4.png", slide4),
+];
 const SLIDE_INTERVAL_MS = 4000;
 
 /** Cut-out harbour scene, sky removed. Served from public/, so no bundler import. */

@@ -11,9 +11,13 @@ import RadialOrbitalTimeline, { type TimelineItem } from "@/components/ui/radial
  */
 import mockDesktop from "@/assets/mock-desktop.mp4";
 import mockMobile from "@/assets/mock-mobile.mp4";
+import { assetSrc } from "@/lib/media";
 
-const DESKTOP_CLIP = { src: mockDesktop }; // 1920 x 1080, 16:9
-const MOBILE_CLIP = { src: mockMobile };   //  720 x 1280, 9:16 portrait
+/* Served from the CDN when VITE_MEDIA_BASE is set — these clips are the two
+   heaviest assets on the site, and the only ones that need real 206 range
+   responses to seek. The bundled imports remain as the fallback. */
+const DESKTOP_CLIP = { src: assetSrc("orbit-desktop.mp4", mockDesktop) }; // 1920 x 1080, 16:9
+const MOBILE_CLIP = { src: assetSrc("orbit-mobile.mp4", mockMobile) };    //  720 x 1280, 9:16 portrait
 
 /** Below this the portrait cut plays. Same cutoff as the sun size. */
 const ORBIT_MOBILE_MQ = "(max-width: 767px)";

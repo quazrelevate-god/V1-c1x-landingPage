@@ -35,3 +35,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Staging copies for the CDN upload — the originals live in src/assets.
+cdn-upload/
