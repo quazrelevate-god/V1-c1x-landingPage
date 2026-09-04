@@ -36,6 +36,27 @@
  */
 export const MEDIA_BASE = import.meta.env["VITE_MEDIA_BASE"]?.replace(/\/+$/, "");
 
+/*
+ * Which files are actually present on the media base.
+ *
+ * This exists because the switch used to be all-or-nothing: setting
+ * VITE_MEDIA_BASE moved every asset at once, so the CDN could not be adopted
+ * until all eleven files were uploaded, and one missing object meant a page of
+ * broken images. Anything not listed here keeps serving from its bundled copy
+ * even when a base is configured, so uploading is incremental and a typo in a
+ * filename degrades to "served from Railway" rather than to a 404.
+ *
+ * Add a filename here once it is confirmed live on the CDN — nothing else.
+ */
+const ON_CDN = new Set([
+  "orbit-desktop.mp4",
+  "orbit-mobile.mp4",
+  "hero-desktop-480.mp4",
+  // The eight .webp images are not uploaded yet. They are ~1MB in total and
+  // already served compressed from the bundle, so they are in no hurry; the
+  // clips are what needed the CDN, for its real 206 range responses.
+]);
+
 /**
  * The CDN URL for `file` (a plain filename that must exist at the media base)
  * when a base is configured, otherwise the Vite-bundled fallback URL.
@@ -44,7 +65,7 @@ export const MEDIA_BASE = import.meta.env["VITE_MEDIA_BASE"]?.replace(/\/+$/, ""
  * makes the fallback work, and it costs nothing at runtime when the CDN is on.
  */
 export function assetSrc(file: string, bundledFallback: string): string {
-  return MEDIA_BASE ? `${MEDIA_BASE}/${file}` : bundledFallback;
+  return MEDIA_BASE && ON_CDN.has(file) ? `${MEDIA_BASE}/${file}` : bundledFallback;
 }
 
 /** @deprecated Use {@link assetSrc}; kept so existing call sites keep building. */
