@@ -1,20 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 
+import baseLayer from "@/assets/map/world-base.webp";
+import liveLayer from "@/assets/map/world-live.webp";
+import soonLayer from "@/assets/map/world-soon.webp";
+
 /*
- * Local reveal observer — deliberately NOT the shared `useInView`.
+ * The dot field is three flat images, not 12,226 vectors.
  *
- * That primitive was neutralised site-wide when section animations were stripped:
- * it returns `inView: true` on mount and its ref never attaches. The map's wave
- * reveal was still wired to it, so every region was already at full opacity before
- * the section came anywhere near the viewport — the animation ran, unseen, and
- * what you scrolled to was a finished static map.
+ * It used to be built at runtime: 12,226 points concatenated into 777 KB of SVG
+ * path data across 33 <path> elements, 32 of which then animated their opacity
+ * on a stagger. An SVG is one rendering context, so each of those fades forced
+ * the browser to re-rasterise the entire thing — including the 565 KB static
+ * landmass that never animated at all. No engine rasterises that much geometry
+ * at 60fps, which is why a ~2 second reveal arrived as a handful of stills, and
+ * why it looked identical on phone, tablet and desktop: it was CPU vector work,
+ * not anything the GPU could absorb.
  *
- * This is the one place that still wants a real trigger, so it gets its own rather
- * than un-neutering the shared hook and waking every other section back up.
- *
- * Threshold 0.5: the reveal starts when the map is half on screen, so the viewer
- * is looking at it when the corridors light up.
+ * Baked to WebP the same artwork is 31 KB, the 263 KB dot JSON stops shipping
+ * altogether, and the reveal is a mask sweeping across a texture — which is the
+ * kind of work a compositor does for free.
  */
+
+/** Local reveal observer. Threshold 0.5 so the ripple starts once you can see it. */
 function useRevealOnce<T extends HTMLElement>(threshold = 0.5) {
   const ref = useRef<T>(null);
   const [revealed, setRevealed] = useState(false);
@@ -26,7 +33,7 @@ function useRevealOnce<T extends HTMLElement>(threshold = 0.5) {
       (entries) => {
         if (entries[0]?.isIntersecting) {
           setRevealed(true);
-          io.disconnect(); // one-shot: the waves shouldn't replay on every pass
+          io.disconnect(); // one-shot: the ripple shouldn't replay on every pass
         }
       },
       { threshold },
@@ -38,10 +45,7 @@ function useRevealOnce<T extends HTMLElement>(threshold = 0.5) {
   return { ref, revealed };
 }
 
-type Dot = { x: number; y: number; t?: number };
 type Region = { name: string; x: number; y: number; t: number };
-type WorldData = { width: number; height: number; points: Dot[]; regions?: Region[] };
-type Built = { base: string; live: string[]; soon: string[]; regions: Region[] };
 
 /** Which way each label leans off its anchor, so neighbours don't collide. */
 const LABEL_SIDE: Record<string, "left" | "right" | "above"> = {
@@ -52,253 +56,111 @@ const LABEL_SIDE: Record<string, "left" | "right" | "above"> = {
   Australia: "right",
 };
 
-// The source art's frame is fixed, so the viewBox — and therefore the box's
-// aspect ratio — are known without loading the 264 KB dot data. That lets the
-// SVG reserve its height on first paint (no layout shift) while the heavy data
-// is fetched lazily, only once the map nears the viewport.
+/* Five markers, inlined. They used to arrive with the dot data, which meant
+   downloading 263 KB of coordinates to place five labels. */
+const REGIONS: Region[] = [
+  { name: "India", x: 175.46, y: 55.34, t: 1 },
+  { name: "Middle East", x: 153.13, y: 51.75, t: 1 },
+  { name: "Africa", x: 131.75, y: 67.32, t: 1 },
+  { name: "Europe", x: 129.51, y: 25.06, t: 2 },
+  { name: "Australia", x: 214.37, y: 91.34, t: 2 },
+];
+
+/** The baked artwork's own frame. Every layout number below is in these units. */
 const MAP_WIDTH = 238;
-// Trim the empty southern ocean below the last highlighted landmass (Tasmania).
-const height = 106;
+const MAP_HEIGHT = 106;
 
-/*
- * Dot radii, against a source grid pitch of 0.5 units.
- *
- * These were 0.32 / 0.38, i.e. diameters of 0.64 and 0.76 — 128% and 152% of the
- * pitch. Neighbouring dots overlapped, so landmasses fused into blobs and
- * coastlines lost their shape. Sized under half the pitch, each dot stands alone
- * and the continents resolve.
- */
-const DOT_BASE = 0.17;
-const DOT_LIVE = 0.21;
-const DOT_SOON = 0.17;
-
-const BASE = "#3A3F38";
 const ACTIVE = "#9CAD1F";
 const SOON = "#5E6B2A";
 
-/** How many waves the highlighted corridors switch on across. */
-const WAVES = 16;
+const FULL_VIEW = { vx: 0, vy: 0, vw: MAP_WIDTH, vh: MAP_HEIGHT };
+/** Narrow screens crop to the corridors that matter, so shapes stay legible. */
+const CORRIDOR_VIEW = { vx: 96, vy: 4, vw: 140, vh: 102 };
 
-const dotAt = (x: number, y: number, r: number) =>
-  `M${x.toFixed(1)} ${y.toFixed(1)}m-${r} 0a${r} ${r} 0 1 0 ${r * 2} 0a${r} ${r} 0 1 0 -${r * 2} 0`;
-
-/**
- * The base landmass is one static path. The highlighted corridors are split
- * into concentric waves radiating out from the India origin, so they can
- * switch on in sequence and read as the network populating.
- *
- * Built from the dot data on demand rather than at module load: the base path
- * alone is ~578 KB of coordinates — the single largest DOM payload on the page —
- * and it sits well below the fold, so there is nothing to gain from paying for
- * it (in the SSR document, the JS bundle, or main-thread build time) before the
- * visitor has scrolled anywhere near it.
+/*
+ * Where the ripple starts: the Arabian Sea, between India and the Gulf — the
+ * same origin the old wave ordering radiated from, so the reveal still reads as
+ * the network spreading out of the corridor rather than arriving from a corner.
  */
-function buildPaths(data: WorldData): Built {
-  let base = "";
-  const live: Dot[] = [];
-  const soon: Dot[] = [];
+const ORIGIN_X = 160;
+const ORIGIN_Y = 62;
 
-  for (const p of data.points) {
-    if (p.y > height) continue;
-    const t = p.t ?? 0;
-    if (t === 1) live.push(p);
-    else if (t === 2) soon.push(p);
-    else base += dotAt(p.x, p.y, DOT_BASE);
-  }
-
-  // origin roughly on the Arabian Sea, between India and the Gulf
-  const ox = 160;
-  const oy = 62;
-  const dist = (p: Dot) => Math.hypot(p.x - ox, p.y - oy);
-  const spread = (pts: Dot[], r: number) => {
-    const max = pts.reduce((m, p) => Math.max(m, dist(p)), 1);
-    const waves: string[] = Array.from({ length: WAVES }, () => "");
-    for (const p of pts) {
-      const w = Math.min(Math.floor((dist(p) / max) * WAVES), WAVES - 1);
-      waves[w] += dotAt(p.x, p.y, r);
-    }
-    return waves;
-  };
-
-  return { base, live: spread(live, DOT_LIVE), soon: spread(soon, DOT_SOON), regions: data.regions ?? [] };
-}
-
-const FULL_VIEW = `0 0 ${MAP_WIDTH} ${height}`;
-/**
- * Narrow screens crop to the corridors that matter (Europe through Australia)
- * so the country shapes stay legible instead of shrinking to a smudge.
- */
-const CORRIDOR_VIEW = "96 4 140 102";
-
-/** Parses a viewBox string so HTML markers can be placed over the same frame. */
-function frameOf(view: string) {
-  const [vx, vy, vw, vh] = view.split(" ").map(Number) as [number, number, number, number];
-  return { vx, vy, vw, vh };
-}
+/** Long enough to read as a spreading wave, short enough not to hold the eye. */
+const RIPPLE_MS = 1500;
 
 export function WorldCorridorMap() {
-  const [view, setView] = useState(FULL_VIEW);
   const { ref, revealed } = useRevealOnce<HTMLDivElement>(0.5);
-
-  /*
-   * Hold the compositor layers only while the reveal is running.
-   *
-   * `will-change: opacity` is what makes the wave smooth — it buys each path a
-   * cached texture instead of a per-frame vector repaint — but a promoted layer
-   * costs GPU memory for as long as it is declared, and there are 33 of them
-   * over a map this size. Once the last wave has landed nothing animates here
-   * again, so the hint is dropped and the memory goes back.
-   *
-   * The timeout covers the longest chain: the soon waves start at 360ms, the
-   * last is staggered 15 x 78ms behind that, and it fades for 420ms.
-   */
-  const [settled, setSettled] = useState(false);
-  useEffect(() => {
-    if (!revealed) return;
-    const t = window.setTimeout(() => setSettled(true), 360 + 15 * 78 + 420 + 200);
-    return () => clearTimeout(t);
-  }, [revealed]);
-
-  /*
-   * Derived, not set from the effect above, and that ordering is the point.
-   *
-   * An effect runs after the render it belongs to, so promoting from there
-   * would apply `will-change` one frame AFTER the opacity target changed — the
-   * first wave has a 0ms delay, so it would start animating unpromoted, which is
-   * the exact frame that has to be cheap. Deriving it means the hint and the new
-   * opacity arrive in the same render, and the browser promotes as it starts.
-   */
-  const layerHint = revealed && !settled ? "opacity" : "auto";
-  const frame = frameOf(view);
-  // Null until the dot data is imported and turned into paths (see below).
-  const [built, setBuilt] = useState<Built | null>(null);
+  const [frame, setFrame] = useState(FULL_VIEW);
 
   useEffect(() => {
-    // Matches the hero's width cutoff: the full world map is unreadable on a phone
-    // or tablet, so anything under a desktop viewport gets the corridor close-up.
-    const mq = window.matchMedia("(max-width: 1023px)");
-    const sync = () => setView(mq.matches ? CORRIDOR_VIEW : FULL_VIEW);
+    const mq = window.matchMedia("(max-width: 640px)");
+    const sync = () => setFrame(mq.matches ? CORRIDOR_VIEW : FULL_VIEW);
     sync();
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
   }, []);
 
-  // Build the dot field on the client, once, after hydration — NOT gated on
-  // scroll. The map must be present wherever its section is, exactly as it was
-  // when server-rendered; deferring only the *build* keeps its ~578 KB of path
-  // data out of the SSR document and its 264 KB source out of the main bundle,
-  // while the map's existence never rides on an observer firing. It's a dynamic
-  // import, so it still lands after first paint rather than blocking it.
-  useEffect(() => {
-    let cancelled = false;
-    import("./world-dots.json")
-      .then((m) => {
-        if (!cancelled) setBuilt(buildPaths((m.default ?? m) as WorldData));
-      })
-      .catch(() => {
-        /* offline or chunk fetch failed — the map just doesn't populate */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  /*
+   * The crop, done in CSS rather than by an SVG viewBox.
+   *
+   * Each layer is the whole map, scaled so the visible frame fills the box and
+   * offset so the frame's origin sits at the box's origin — arithmetically the
+   * same thing a viewBox does, which is what keeps the marker maths below
+   * unchanged.
+   */
+  const layer: React.CSSProperties = {
+    position: "absolute",
+    width: `${(MAP_WIDTH / frame.vw) * 100}%`,
+    height: `${(MAP_HEIGHT / frame.vh) * 100}%`,
+    left: `${(-frame.vx / frame.vw) * 100}%`,
+    top: `${(-frame.vy / frame.vh) * 100}%`,
+    maxWidth: "none",
+  };
 
-  const regions = built?.regions ?? [];
+  /*
+   * The droplet.
+   *
+   * A radial gradient mask whose radius is driven by one custom property, so the
+   * whole reveal is a single interpolating value rather than 32 staggered
+   * transitions. The soft band between the opaque core and the transparent edge
+   * is what gives it a wavefront instead of a hard expanding disc.
+   *
+   * `--c1x-ripple` is registered in styles.css with @property; without that
+   * registration a custom property is just a string and cannot interpolate, so
+   * the mask would jump rather than sweep.
+   */
+  const ox = ((ORIGIN_X - frame.vx) / frame.vw) * 100;
+  const oy = ((ORIGIN_Y - frame.vy) / frame.vh) * 100;
+  const rippleMask: React.CSSProperties = {
+    ...layer,
+    ["--c1x-ripple" as string]: revealed ? "180%" : "0%",
+    transition: `--c1x-ripple ${RIPPLE_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1)`,
+    WebkitMaskImage: `radial-gradient(circle at ${ox}% ${oy}%, #000 calc(var(--c1x-ripple) * 0.62), rgba(0,0,0,0.45) calc(var(--c1x-ripple) * 0.85), transparent var(--c1x-ripple))`,
+    maskImage: `radial-gradient(circle at ${ox}% ${oy}%, #000 calc(var(--c1x-ripple) * 0.62), rgba(0,0,0,0.45) calc(var(--c1x-ripple) * 0.85), transparent var(--c1x-ripple))`,
+  };
 
   return (
     <div ref={ref} className="relative w-full">
-      <svg
-        viewBox={view}
-        className="h-auto w-full"
+      {/* The box reserves its height from the frame's aspect, so nothing shifts
+          when the images decode. */}
+      <div
+        className="relative w-full overflow-hidden"
+        style={{ aspectRatio: `${frame.vw} / ${frame.vh}` }}
         role="img"
         aria-label="World map highlighting active regions in India, the Middle East and Africa, with Europe and Australia coming soon"
       >
-        {built ? (
-          <>
-            {/* The base landmass is on the instant it builds — its visibility
-                never rides on the reveal timing, so the map can't come up blank. */}
-{/*
-              userSpaceOnUse, spanning the map's own coordinates — not the default
-              objectBoundingBox. The live regions are drawn as 16 separate wave
-              paths, and a bounding-box gradient would restart inside each one, so
-              the ramp would visibly reset wave by wave. In user space all 16 read
-              from a single gradient laid across the whole map.
-            */}
-            <defs>
-              <linearGradient
-                id="c1x-live-grad"
-                gradientUnits="userSpaceOnUse"
-                x1="0"
-                y1="0"
-                x2="0"
-                y2={height}
-              >
-                <stop offset="0%" stopColor="#D4E84A" />
-                <stop offset="55%" stopColor="#9CAD1F" />
-                <stop offset="100%" stopColor="#6E7D12" />
-              </linearGradient>
-            </defs>
-
-            {/*
-              LAYER PROMOTION — this is why the reveal is smooth.
-
-              An SVG is one rendering context. Change a child's opacity with
-              nothing promoted and the browser re-rasterises the WHOLE svg, and
-              this one carries 777 KB of path data — 565 KB of it in the static
-              base alone. The reveal runs 32 staggered transitions over ~1.7s, so
-              that full repaint was happening every frame for the whole reveal.
-              Vector geometry that heavy cannot be re-rasterised at 60fps, so the
-              wave arrived as a series of stills rather than as motion.
-
-              `will-change: opacity` gives each path its own cached texture. The
-              base is rasterised once and never touched again; each wave becomes
-              a GPU alpha blend instead of a vector repaint.
-
-              The base is promoted too, and that matters most: without it, every
-              sibling's fade would keep dirtying those 565 KB no matter how cheap
-              the waves themselves became.
-            */}
-            <path
-              d={built.base}
-              fill={BASE}
-              opacity={0.85}
-              style={{ willChange: layerHint }}
-            />
-            {built.soon.map((d, i) => (
-              <path
-                key={`s${i}`}
-                d={d}
-                fill={SOON}
-                style={{
-                  opacity: revealed ? 0.7 : 0,
-                  transition: `opacity 420ms linear ${360 + i * 78}ms`,
-                  willChange: layerHint,
-                }}
-              />
-            ))}
-            {built.live.map((d, i) => (
-              <path
-                key={`l${i}`}
-                d={d}
-                fill="url(#c1x-live-grad)"
-                style={{
-                  opacity: revealed ? 0.95 : 0,
-                  transition: `opacity 380ms linear ${i * 78}ms`,
-                  willChange: layerHint,
-                }}
-              />
-            ))}
-          </>
-        ) : null}
-      </svg>
+        <img src={baseLayer} alt="" aria-hidden decoding="async" style={{ ...layer, opacity: 0.85 }} />
+        <img src={soonLayer} alt="" aria-hidden decoding="async" style={rippleMask} />
+        <img src={liveLayer} alt="" aria-hidden decoding="async" style={rippleMask} />
+      </div>
 
       {/*
-        Region markers ride over the SVG as HTML rather than <text>, so the type
-        stays at a readable size whether the map is showing the whole world or
-        the mobile corridor crop.
+        Region markers ride over the map as HTML rather than baked-in type, so
+        the labels stay at a readable size whether the map is showing the whole
+        world or the mobile corridor crop.
       */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
-        {regions.map((r, i) => {
+        {REGIONS.map((r, i) => {
           const left = ((r.x - frame.vx) / frame.vw) * 100;
           const top = ((r.y - frame.vy) / frame.vh) * 100;
           if (left < -4 || left > 104 || top < -4 || top > 104) return null;
@@ -318,7 +180,8 @@ export function WorldCorridorMap() {
                       ? "translate(-50%, -140%)"
                       : "translate(0, -50%)",
                 opacity: revealed ? 1 : 0,
-                transitionDelay: `${1250 + i * 110}ms`,
+                // Each marker lands just after the wavefront has passed it.
+                transitionDelay: `${400 + i * 140}ms`,
               }}
             >
               {side === "left" ? <RegionLabel name={r.name} live={live} /> : null}

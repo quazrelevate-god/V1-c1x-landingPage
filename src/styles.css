@@ -73,6 +73,19 @@
   --ink: oklch(0.145 0 0);
 }
 
+/*
+ * Registered so it can interpolate.
+ *
+ * An unregistered custom property is just a string to the animation engine, so
+ * a transition on it snaps from start to end. @property gives it a type, which
+ * is what lets the world map's ripple sweep instead of jump.
+ */
+@property --c1x-ripple {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
