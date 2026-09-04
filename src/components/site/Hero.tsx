@@ -14,7 +14,6 @@ const slides = [slide1, slide2, slide3, slide4];
 const SLIDE_INTERVAL_MS = 4000;
 
 /** Cut-out harbour scene, sky removed. Served from public/, so no bundler import. */
-const HERO_FOREGROUND = "/images/hero-foreground.png";
 
 /*
  * Three scroll beats across the pinned range (p 0..1).
@@ -99,8 +98,6 @@ const BURY_BLUR_PX = 14;
 const BURY_BRIGHTNESS = 0.5;
 const BURY_SCALE = 0.97;
 
-/** How far the cut-out foreground leads the card, in px, over the expand beat. */
-const FG_LEAD_PX = 260;
 
 const MOBILE_MQ = "(max-width: 767px)";
 const MOBILE_AMPLITUDE = 0.4;
@@ -141,7 +138,6 @@ export function Hero() {
   const pinnedRef = useRef<HTMLDivElement>(null);
   const buryRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const foregroundRef = useRef<HTMLImageElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const ghostBandRef = useRef<HTMLDivElement>(null);
 
@@ -178,9 +174,8 @@ export function Hero() {
       const pinned = pinnedRef.current;
       const bury = buryRef.current;
       const card = cardRef.current;
-      const foreground = foregroundRef.current;
       const ghost = ghostRef.current;
-      if (!pinned || !bury || !card || !foreground) return;
+      if (!pinned || !bury || !card) return;
 
       const paneH = pinned.offsetHeight;
       const range = Math.max(section.offsetHeight - paneH, 1);
@@ -230,10 +225,6 @@ export function Hero() {
       card.style.bottom = `${lerp(r.bottom, 0, e).toFixed(1)}px`;
       card.style.borderRadius = `${lerp(r.radius, 0, e).toFixed(1)}px`;
       card.style.boxShadow = `0 24px 60px -20px rgba(0,0,0,${lerp(0.35, 0, e).toFixed(3)})`;
-
-      // Foreground leads the card outward over the same beat, damped on mobile.
-      const fgY = lerp(0, FG_LEAD_PX, easeOutCubic(clamp01(p / P_EXPAND_END))) * amp;
-      foreground.style.transform = `translate3d(0, ${(-fgY).toFixed(2)}px, 0)`;
 
       // Ghost type is the furthest-back layer: it lags at half the scroll rate,
       // so it drifts down the screen more slowly than anything in front of it.
@@ -493,21 +484,19 @@ export function Hero() {
           </div>
 
           {/*
-            LAYER 3 — cut-out foreground.
+            LAYER 3 — cut-out foreground — removed.
 
-            A SIBLING of the card, never a child: the card is overflow-hidden to
-            clip its photograph to the rounded corners, and anything inside would
-            be clipped by the same rule. This has to cross the card's bottom edge.
+            It pointed at /images/hero-foreground.png, which has never existed:
+            public/images/ is empty. Chrome and Firefox paint a missing image as
+            nothing, so the layer looked merely inert. WebKit does not — Safari
+            on iPhone, iPad and macOS drew the element's box and a broken-image
+            placeholder over the hero, which is the faint rectangle and the small
+            blue "?" that showed up in the composition.
+
+            Reinstating it means adding the artwork to public/images/ first, then
+            an <img> with the ref, the guard entry and the FG_LEAD_PX transform
+            below restored together.
           */}
-          <img
-            ref={foregroundRef}
-            src={HERO_FOREGROUND}
-            alt=""
-            aria-hidden
-            draggable={false}
-            className="pointer-events-none absolute bottom-0 left-[-15%] z-20 h-auto w-[130%]"
-            style={{ willChange: "transform" }}
-          />
         </div>
       </div>
     </section>
